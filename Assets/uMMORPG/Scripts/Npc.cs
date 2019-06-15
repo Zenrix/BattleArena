@@ -10,16 +10,6 @@ using UnityEngine;
 using Mirror;
 using TMPro;
 
-// talk-to-npc quests work by adding the same quest to two npcs, one with
-// accept=true and complete=false, the other with accept=false and complete=true
-[Serializable]
-public class ScriptableQuestOffer
-{
-    public ScriptableQuest quest;
-    public bool acceptHere = true;
-    public bool completeHere = true;
-}
-
 [RequireComponent(typeof(NetworkNavMeshAgent))]
 public partial class Npc : Entity
 {
@@ -32,14 +22,8 @@ public partial class Npc : Entity
     [Header("Items for Sale")]
     public ScriptableItem[] saleItems;
 
-    [Header("Quests")]
-    public ScriptableQuestOffer[] quests;
-
     [Header("Teleportation")]
     public Transform teleportTo;
-
-    [Header("Guild Management")]
-    public bool offersGuildManagement = true;
 
     [Header("Summonables")]
     public bool offersSummonableRevive = true;
@@ -69,35 +53,8 @@ public partial class Npc : Entity
     protected override void UpdateOverlays()
     {
         base.UpdateOverlays();
-
-        if (questOverlay != null)
-        {
-            // find local player (null while in character selection)
-            if (Player.localPlayer != null)
-            {
-                if (quests.Any(entry => entry.completeHere && Player.localPlayer.CanCompleteQuest(entry.quest.name)))
-                    questOverlay.text = "!";
-                else if (quests.Any(entry => entry.acceptHere && Player.localPlayer.CanAcceptQuest(entry.quest)))
-                    questOverlay.text = "?";
-                else
-                    questOverlay.text = "";
-            }
-        }
     }
 
     // skills //////////////////////////////////////////////////////////////////
     public override bool CanAttack(Entity entity) { return false; }
-
-    // quests //////////////////////////////////////////////////////////////////
-    // helper function to filter the quests that are shown for a player
-    // -> all quests that:
-    //    - can be started by the player
-    //    - or were already started but aren't completed yet
-    public List<ScriptableQuest> QuestsVisibleFor(Player player)
-    {
-        return quests.Where(entry => (entry.acceptHere && player.CanAcceptQuest(entry.quest)) ||
-                                     (entry.completeHere && player.HasActiveQuest(entry.quest.name)))
-                     .Select(entry => entry.quest)
-                     .ToList();
-    }
 }

@@ -275,10 +275,6 @@ public partial class Player : Entity
         new SkillbarEntry{reference="", hotKey=KeyCode.Alpha0},
     };
 
-    [Header("Quests")] // contains active and completed quests (=all)
-    public int activeQuestLimit = 10;
-    public SyncListQuest quests = new SyncListQuest();
-
     [Header("Interaction")]
     public float interactionRange = 4;
     public KeyCode targetNearestKey = KeyCode.Tab;
@@ -304,18 +300,6 @@ public partial class Player : Entity
     public ItemMallCategory[] itemMallCategories; // the items that can be purchased in the item mall
     [SyncVar] public long coins = 0;
     public float couponWaitSeconds = 3;
-
-    [Header("Guild")]
-    [SyncVar, HideInInspector] public string guildInviteFrom = "";
-    [SyncVar, HideInInspector] public Guild guild; // TODO SyncToOwner later
-    public float guildInviteWaitSeconds = 3;
-
-    // .party is a copy for easier reading/syncing. Use PartySystem to manage
-    // parties!
-    [Header("Party")]
-    [SyncVar, HideInInspector] public Party party; // TODO SyncToOwner later
-    [SyncVar, HideInInspector] public string partyInviteFrom = "";
-    public float partyInviteWaitSeconds = 3;
 
     // 'Pet' can't be SyncVar so we use [SyncVar] GameObject and wrap it
     [Header("Pet")]
@@ -471,12 +455,6 @@ public partial class Player : Entity
                 if (buffs[i].BuffTimeRemaining() > 0)
                     buffs[i].data.SpawnEffect(this, this);
 
-        // notify guild members that we are online. this also updates the client's
-        // own guild info via targetrpc automatically
-        // -> OnStartServer is too early because it's not spawned there yet
-        if (isServer)
-            SetGuildOnline(true);
-
         // addon system hooks
         Utils.InvokeMany(typeof(Player), this, "Start_");
     }
@@ -525,24 +503,6 @@ public partial class Player : Entity
     {
         // do nothing if not spawned (=for character selection previews)
         if (!isServer && !isClient) return;
-
-        // Unity bug: isServer is false when called in host mode. only true when
-        // called in dedicated mode. so we need a workaround:
-        if (NetworkServer.active) // isServer
-        {
-            // leave party (if any)
-            if (InParty())
-            {
-                // dismiss if master, leave otherwise
-                if (party.master == name)
-                    PartyDismiss();
-                else
-                    PartyLeave();
-            }
-
-            // notify guild members that we are offline
-            SetGuildOnline(false);
-        }
 
         if (isLocalPlayer) // requires at least Unity 5.5.1 bugfix to work
         {
@@ -1222,17 +1182,11 @@ public partial class Player : Entity
                     nameOverlay.color = nameOverlayMurdererColor;
                 else if (IsOffender())
                     nameOverlay.color = nameOverlayOffenderColor;
-                // member of the same party
-                else if (localPlayer.InParty() && localPlayer.party.Contains(name))
-                    nameOverlay.color = nameOverlayPartyColor;
                 // otherwise default
                 else
                     nameOverlay.color = nameOverlayDefaultColor;
             }
         }
-
-        if (guildOverlay != null)
-            guildOverlay.text = !string.IsNullOrWhiteSpace(guild.name) ? guildOverlayPrefix + guild.name + guildOverlaySuffix : "";
     }
 
     // skill finished event & pending actions //////////////////////////////////
@@ -1337,7 +1291,7 @@ public partial class Player : Entity
         if (monster.health == 0)
         {
             // share kill rewards with party or only for self
-            List<Player> closeMembers = InParty() ? GetPartyMembersInProximity() : new List<Player>();
+            List<Player> closeMembers = new List<Player>();
 
             // share experience & skill experience
             // note: bonus only applies to exp. share parties, otherwise
@@ -1347,31 +1301,9 @@ public partial class Player : Entity
             //       two members only receive 2 exp each (= 4 total).
             //       this happens because of exp balancing by level and
             //       is as intended.
-            if (InParty() && party.shareExperience)
-            {
-                foreach (Player member in closeMembers)
-                {
-                    member.experience += CalculatePartyExperienceShare(
-                        monster.rewardExperience,
-                        closeMembers.Count,
-                        Party.BonusExperiencePerMember,
-                        member.level,
-                        monster.level
-                    );
-                    member.skillExperience += CalculatePartyExperienceShare(
-                        monster.rewardSkillExperience,
-                        closeMembers.Count,
-                        Party.BonusExperiencePerMember,
-                        member.level,
-                        monster.level
-                    );
-                }
-            }
-            else
-            {
-                skillExperience += BalanceExpReward(monster.rewardSkillExperience, level, monster.level);
-                experience += BalanceExpReward(monster.rewardExperience, level, monster.level);
-            }
+
+            skillExperience += BalanceExpReward(monster.rewardSkillExperience, level, monster.level);
+            experience += BalanceExpReward(monster.rewardExperience, level, monster.level);
 
             // give pet the same exp without dividing it, but balance it
             // => AFTER player exp reward! pet can only ever level up to player
@@ -1379,14 +1311,6 @@ public partial class Player : Entity
             //    first, then afterwards we try to level up the pet.
             if (activePet != null)
                 activePet.experience += BalanceExpReward(monster.rewardExperience, activePet.level, monster.level);
-
-            // increase quest kill counter for all party members
-            if (InParty())
-            {
-                foreach (Player member in closeMembers)
-                    member.QuestsOnKilled(monster);
-            }
-            else QuestsOnKilled(monster);
         }
     }
 
@@ -1534,28 +1458,8 @@ public partial class Player : Entity
             target != null && target is Monster && target.health == 0 &&
             Utils.ClosestDistance(collider, target.collider) <= interactionRange)
         {
-            // distribute reward through party or to self
-            if (InParty() && party.shareGold)
-            {
-                // find all party members in observer range
-                // (we don't distribute it all across the map. standing
-                //  next to each other is a better experience. players
-                //  can't just stand safely in a city while gaining exp)
-                List<Player> closeMembers = GetPartyMembersInProximity();
 
-                // calculate the share via ceil, so that uneven numbers
-                // still result in at least total gold in the end.
-                // e.g. 4/2=2 (good); 5/2=2 (1 gold got lost)
-                long share = (long)Mathf.Ceil((float)target.gold / (float)closeMembers.Count);
-
-                // now distribute
-                foreach (Player member in closeMembers)
-                    member.gold += share;
-            }
-            else
-            {
-                gold += target.gold;
-            }
+            gold += target.gold;
 
             // reset target gold
             target.gold = 0;
@@ -2017,134 +1921,6 @@ public partial class Player : Entity
             else if (i < learned.Count)
             {
                 skillbar[i].reference = learned[i].name;
-            }
-        }
-    }
-
-    // quests //////////////////////////////////////////////////////////////////
-    public int GetQuestIndexByName(string questName)
-    {
-        return quests.FindIndex(quest => quest.name == questName);
-    }
-
-    // helper function to check if the player has completed a quest before
-    public bool HasCompletedQuest(string questName)
-    {
-        return quests.Any(q => q.name == questName && q.completed);
-    }
-
-    // helper function to check if a player has an active (not completed) quest
-    public bool HasActiveQuest(string questName)
-    {
-        return quests.Any(q => q.name == questName && !q.completed);
-    }
-
-    [Server]
-    public void QuestsOnKilled(Entity victim)
-    {
-        // call OnKilled in all active (not completed) quests
-        for (int i = 0; i < quests.Count; ++i)
-            if (!quests[i].completed)
-                quests[i].OnKilled(this, i, victim);
-    }
-
-    [Server]
-    public void QuestsOnLocation(Collider location)
-    {
-        // call OnLocation in all active (not completed) quests
-        for (int i = 0; i < quests.Count; ++i)
-            if (!quests[i].completed)
-                quests[i].OnLocation(this, i, location);
-    }
-
-    // helper function to check if the player can accept a new quest
-    // note: no quest.completed check needed because we have a'not accepted yet'
-    //       check
-    public bool CanAcceptQuest(ScriptableQuest quest)
-    {
-        // not too many quests yet?
-        // has required level?
-        // not accepted yet?
-        // has finished predecessor quest (if any)?
-        return quests.Count(q => !q.completed) < activeQuestLimit &&
-               level >= quest.requiredLevel &&          // has required level?
-               GetQuestIndexByName(quest.name) == -1 && // not accepted yet?
-               (quest.predecessor == null || HasCompletedQuest(quest.predecessor.name));
-    }
-
-    [Command]
-    public void CmdAcceptQuest(int npcQuestIndex)
-    {
-        // validate
-        // use collider point(s) to also work with big entities
-        if (state == "IDLE" &&
-            target != null &&
-            target.health > 0 &&
-            target is Npc &&
-            0 <= npcQuestIndex && npcQuestIndex < ((Npc)target).quests.Length &&
-            Utils.ClosestDistance(collider, target.collider) <= interactionRange)
-        {
-            ScriptableQuestOffer npcQuest = ((Npc)target).quests[npcQuestIndex];
-            if (npcQuest.acceptHere && CanAcceptQuest(npcQuest.quest))
-                quests.Add(new Quest(npcQuest.quest));
-        }
-    }
-
-    // helper function to check if the player can complete a quest
-    public bool CanCompleteQuest(string questName)
-    {
-        // has the quest and not completed yet?
-        int index = GetQuestIndexByName(questName);
-        if (index != -1 && !quests[index].completed)
-        {
-            // fulfilled?
-            Quest quest = quests[index];
-            if(quest.IsFulfilled(this))
-            {
-                // enough space for reward item (if any)?
-                return quest.rewardItem == null || InventoryCanAdd(new Item(quest.rewardItem), 1);
-            }
-        }
-        return false;
-    }
-
-    [Command]
-    public void CmdCompleteQuest(int npcQuestIndex)
-    {
-        // validate
-        // use collider point(s) to also work with big entities
-        if (state == "IDLE" &&
-            target != null &&
-            target.health > 0 &&
-            target is Npc &&
-            0 <= npcQuestIndex && npcQuestIndex < ((Npc)target).quests.Length &&
-            Utils.ClosestDistance(collider, target.collider) <= interactionRange)
-        {
-            ScriptableQuestOffer npcQuest = ((Npc)target).quests[npcQuestIndex];
-            if (npcQuest.completeHere)
-            {
-                int index = GetQuestIndexByName(npcQuest.quest.name);
-                if (index != -1)
-                {
-                    // can complete it? (also checks inventory space for reward, if any)
-                    Quest quest = quests[index];
-                    if (CanCompleteQuest(quest.name))
-                    {
-                        // call quest.OnCompleted to remove quest items from
-                        // inventory, etc.
-                        quest.OnCompleted(this);
-
-                        // gain rewards
-                        gold += quest.rewardGold;
-                        experience += quest.rewardExperience;
-                        if (quest.rewardItem != null)
-                            InventoryAdd(new Item(quest.rewardItem), 1);
-
-                        // complete quest
-                        quest.completed = true;
-                        quests[index] = quest;
-                    }
-                }
             }
         }
     }
@@ -2696,248 +2472,6 @@ public partial class Player : Entity
         }
     }
 
-    // guild ///////////////////////////////////////////////////////////////////
-    public bool InGuild()
-    {
-        return !string.IsNullOrWhiteSpace(guild.name);
-    }
-
-    [Server]
-    public void SetGuildOnline(bool online)
-    {
-        // validate
-        if (InGuild())
-            GuildSystem.SetGuildOnline(guild.name, name, online);
-    }
-
-    [Command]
-    public void CmdGuildInviteTarget()
-    {
-        // validate
-        if (target != null && target is Player &&
-            InGuild() && !((Player)target).InGuild() &&
-            guild.CanInvite(name, target.name) &&
-            NetworkTime.time >= nextRiskyActionTime &&
-            Utils.ClosestDistance(collider, target.collider) <= interactionRange)
-        {
-            // send a invite and reset risky time
-            ((Player)target).guildInviteFrom = name;
-            nextRiskyActionTime = NetworkTime.time + guildInviteWaitSeconds;
-            print(name + " invited " + target.name + " to guild");
-        }
-    }
-
-    [Command]
-    public void CmdGuildInviteAccept()
-    {
-        // valid invitation, sender exists and is in a guild?
-        // note: no distance check because sender might be far away already
-        if (!InGuild() && guildInviteFrom != "" &&
-            onlinePlayers.TryGetValue(guildInviteFrom, out Player sender) &&
-            sender.InGuild())
-        {
-            // try to add. GuildSystem does all the checks.
-            GuildSystem.AddToGuild(sender.guild.name, sender.name, name, level);
-        }
-
-        // reset guild invite in any case
-        guildInviteFrom = "";
-    }
-
-    [Command]
-    public void CmdGuildInviteDecline()
-    {
-        guildInviteFrom = "";
-    }
-
-    [Command]
-    public void CmdGuildKick(string memberName)
-    {
-        // validate
-        if (InGuild())
-            GuildSystem.KickFromGuild(guild.name, name, memberName);
-    }
-
-    [Command]
-    public void CmdGuildPromote(string memberName)
-    {
-        // validate
-        if (InGuild())
-            GuildSystem.PromoteMember(guild.name, name, memberName);
-    }
-
-    [Command]
-    public void CmdGuildDemote(string memberName)
-    {
-        // validate
-        if (InGuild())
-            GuildSystem.DemoteMember(guild.name, name, memberName);
-    }
-
-    [Command]
-    public void CmdSetGuildNotice(string notice)
-    {
-        // validate
-        // (only allow changes every few seconds to avoid bandwidth issues)
-        if (InGuild() && NetworkTime.time >= nextRiskyActionTime)
-        {
-            // try to set notice. reset time if it worked.
-            if (GuildSystem.SetGuildNotice(guild.name, name, notice))
-                nextRiskyActionTime = NetworkTime.time + GuildSystem.NoticeWaitSeconds;
-        }
-    }
-
-    // helper function to check if we are near a guild manager npc
-    public bool IsGuildManagerNear()
-    {
-        return target != null &&
-               target is Npc &&
-               ((Npc)target).offersGuildManagement &&
-               Utils.ClosestDistance(collider, target.collider) <= interactionRange;
-    }
-
-    [Command]
-    public void CmdTerminateGuild()
-    {
-        // validate
-        if (InGuild() && IsGuildManagerNear())
-            GuildSystem.TerminateGuild(guild.name, name);
-    }
-
-    [Command]
-    public void CmdCreateGuild(string guildName)
-    {
-        // validate
-        if (health > 0 && gold >= GuildSystem.CreationPrice &&
-            !InGuild() && IsGuildManagerNear())
-        {
-            // try to create the guild. pay for it if it worked.
-            if (GuildSystem.CreateGuild(name, level, guildName))
-                gold -= GuildSystem.CreationPrice;
-            else
-                chat.TargetMsgInfo("Guild name invalid!");
-        }
-    }
-
-    [Command]
-    public void CmdLeaveGuild()
-    {
-        // validate
-        if (InGuild())
-            GuildSystem.LeaveGuild(guild.name, name);
-    }
-
-    // party ///////////////////////////////////////////////////////////////////
-    public bool InParty()
-    {
-        // 0 means no party, because default party struct's partyId is 0.
-        return party.partyId > 0;
-    }
-
-    // find party members in proximity for item/exp sharing etc.
-    public List<Player> GetPartyMembersInProximity()
-    {
-        if (InParty())
-        {
-            return netIdentity.observers.Values
-                                        .Select(conn => conn.playerController.GetComponent<Player>())
-                                        .Where(p => party.Contains(p.name))
-                                        .ToList();
-        }
-        return new List<Player>();
-    }
-
-    // party invite by name (not by target) so that chat commands are possible
-    // if needed
-    [Command]
-    public void CmdPartyInvite(string otherName)
-    {
-        // validate: is there someone with that name, and not self?
-        if (otherName != name && onlinePlayers.ContainsKey(otherName) &&
-            NetworkTime.time >= nextRiskyActionTime)
-        {
-            Player other = onlinePlayers[otherName];
-
-            // can only send invite if no party yet or party isn't full and
-            // have invite rights and other guy isn't in party yet
-            if ((!InParty() || !party.IsFull()) && !other.InParty())
-            {
-                // send a invite and reset risky time
-                other.partyInviteFrom = name;
-                nextRiskyActionTime = NetworkTime.time + partyInviteWaitSeconds;
-                print(name + " invited " + other.name + " to party");
-            }
-        }
-    }
-
-    [Command]
-    public void CmdPartyInviteAccept()
-    {
-        // valid invitation?
-        // note: no distance check because sender might be far away already
-        if (!InParty() && partyInviteFrom != "" &&
-            onlinePlayers.ContainsKey(partyInviteFrom))
-        {
-            // find sender
-            Player sender = onlinePlayers[partyInviteFrom];
-
-            // is in party? then try to add
-            if (sender.InParty())
-                PartySystem.AddToParty(sender.party.partyId, name);
-            // otherwise try to form a new one
-            else
-                PartySystem.FormParty(sender.name, name);
-        }
-
-        // reset party invite in any case
-        partyInviteFrom = "";
-    }
-
-    [Command]
-    public void CmdPartyInviteDecline()
-    {
-        partyInviteFrom = "";
-    }
-
-    [Command]
-    public void CmdPartyKick(string member)
-    {
-        // try to kick. party system will do all the validation.
-        PartySystem.KickFromParty(party.partyId, name, member);
-    }
-
-    // version without cmd because we need to call it from the server too
-    public void PartyLeave()
-    {
-        // try to leave. party system will do all the validation.
-        PartySystem.LeaveParty(party.partyId, name);
-    }
-    [Command]
-    public void CmdPartyLeave() { PartyLeave(); }
-
-    // version without cmd because we need to call it from the server too
-    public void PartyDismiss()
-    {
-        // try to dismiss. party system will do all the validation.
-        PartySystem.DismissParty(party.partyId, name);
-    }
-    [Command]
-    public void CmdPartyDismiss() { PartyDismiss(); }
-
-    [Command]
-    public void CmdPartySetExperienceShare(bool value)
-    {
-        // try to set. party system will do all the validation.
-        PartySystem.SetPartyExperienceShare(party.partyId, name, value);
-    }
-
-    [Command]
-    public void CmdPartySetGoldShare(bool value)
-    {
-        // try to set. party system will do all the validation.
-        PartySystem.SetPartyGoldShare(party.partyId, name, value);
-    }
-
     // pet /////////////////////////////////////////////////////////////////////
     [Command]
     public void CmdPetSetAutoAttack(bool value)
@@ -3237,10 +2771,6 @@ public partial class Player : Entity
     {
         // call base function too
         base.OnTriggerEnter(col);
-
-        // quest location?
-        if (isServer && col.tag == "QuestLocation")
-            QuestsOnLocation(col);
     }
 
     // drag and drop ///////////////////////////////////////////////////////////

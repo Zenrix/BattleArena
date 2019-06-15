@@ -602,9 +602,6 @@ public partial class Pet : Summonable
                         ownerNameOverlay.color = owner.nameOverlayMurdererColor;
                     else if (owner.IsOffender())
                         ownerNameOverlay.color = owner.nameOverlayOffenderColor;
-                    // member of the same party
-                    else if (Player.localPlayer.InParty() && Player.localPlayer.party.Contains(owner.name))
-                        ownerNameOverlay.color = owner.nameOverlayPartyColor;
                     // otherwise default
                     else
                         ownerNameOverlay.color = owner.nameOverlayDefaultColor;

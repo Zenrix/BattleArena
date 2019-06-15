@@ -503,48 +503,6 @@ public partial class Database : MonoBehaviour
         }
     }
 
-    void LoadQuests(Player player)
-    {
-        // load quests
-        List< List<object> > table = ExecuteReader("SELECT name, progress, completed FROM character_quests WHERE character=@character", new SqliteParameter("@character", player.name));
-        foreach (List<object> row in table)
-        {
-            string questName = (string)row[0];
-            ScriptableQuest questData;
-            if (ScriptableQuest.dict.TryGetValue(questName.GetStableHashCode(), out questData))
-            {
-                Quest quest = new Quest(questData);
-                quest.progress = Convert.ToInt32((long)row[1]);
-                quest.completed = ((long)row[2]) != 0; // sqlite has no bool
-                player.quests.Add(quest);
-            }
-            else Debug.LogWarning("LoadQuests: skipped quest " + questData.name + " for " + player.name + " because it doesn't exist anymore. If it wasn't removed intentionally then make sure it's in the Resources folder.");
-        }
-    }
-
-    // only load guild when their first player logs in
-    // => using NetworkManager.Awake to load all guilds.Where would work,
-    //    but we would require lots of memory and it might take a long time.
-    // => hooking into player loading to load guilds is a really smart solution,
-    //    because we don't ever have to load guilds that aren't needed
-    void LoadGuildOnDemand(Player player)
-    {
-        string guildName = (string)ExecuteScalar("SELECT guild FROM character_guild WHERE character=@character", new SqliteParameter("@character", player.name));
-        if (guildName != null)
-        {
-            // load guild on demand when the first player of that guild logs in
-            // (= if it's not in GuildSystem.guilds yet)
-            if (!GuildSystem.guilds.ContainsKey(guildName))
-            {
-                Guild guild = LoadGuild(guildName);
-                GuildSystem.guilds[guild.name] = guild;
-                player.guild = guild;
-            }
-            // assign from already loaded guild
-            else player.guild = GuildSystem.guilds[guildName];
-        }
-    }
-
     public GameObject CharacterLoad(string characterName, List<Player> prefabs, bool isPreview)
     {
         List< List<object> > table = ExecuteReader("SELECT * FROM characters WHERE name=@name AND deleted=0", new SqliteParameter("@name", characterName));
@@ -601,8 +559,6 @@ public partial class Database : MonoBehaviour
                 LoadEquipment(player);
                 LoadSkills(player);
                 LoadBuffs(player);
-                LoadQuests(player);
-                LoadGuildOnDemand(player);
 
                 // assign health / mana after max values were fully loaded
                 // (they depend on equipment, buffs, etc.)
@@ -703,18 +659,6 @@ public partial class Database : MonoBehaviour
                             new SqliteParameter("@buffTimeEnd", buff.BuffTimeRemaining()));
     }
 
-    void SaveQuests(Player player)
-    {
-        // quests: remove old entries first, then add all new ones
-        ExecuteNonQuery("DELETE FROM character_quests WHERE character=@character", new SqliteParameter("@character", player.name));
-        foreach (Quest quest in player.quests)
-            ExecuteNonQuery("INSERT INTO character_quests VALUES (@character, @name, @progress, @completed)",
-                            new SqliteParameter("@character", player.name),
-                            new SqliteParameter("@name", quest.name),
-                            new SqliteParameter("@progress", quest.progress),
-                            new SqliteParameter("@completed", Convert.ToInt32(quest.completed)));
-    }
-
     // adds or overwrites character data in the database
     public void CharacterSave(Player player, bool online, bool useTransaction = true)
     {
@@ -744,8 +688,6 @@ public partial class Database : MonoBehaviour
         SaveEquipment(player);
         SaveSkills(player);
         SaveBuffs(player);
-        SaveQuests(player);
-        if (player.InGuild()) SaveGuild(player.guild, false); // TODO only if needs saving? but would be complicated
 
         // addon system hooks
         Utils.InvokeMany(typeof(Database), this, "CharacterSave_", player);
@@ -759,82 +701,6 @@ public partial class Database : MonoBehaviour
         ExecuteNonQuery("BEGIN"); // transaction for performance
         foreach (Player player in players)
             CharacterSave(player, online, false);
-        ExecuteNonQuery("END");
-    }
-
-    // guilds //////////////////////////////////////////////////////////////////
-    public bool GuildExists(string guild)
-    {
-        return ((long)ExecuteScalar("SELECT Count(*) FROM guild_info WHERE name=@name", new SqliteParameter("@name", guild))) == 1;
-    }
-
-    Guild LoadGuild(string guildName)
-    {
-        Guild guild = new Guild();
-
-        // set name
-        guild.name = guildName;
-
-        // load guild info
-        List< List<object> > table = ExecuteReader("SELECT notice FROM guild_info WHERE name=@guild", new SqliteParameter("@guild", guildName));
-        if (table.Count == 1) {
-            List<object> row = table[0];
-            guild.notice = (string)row[0];
-        }
-
-        // load members list
-        List<GuildMember> members = new List<GuildMember>();
-        table = ExecuteReader("SELECT character, rank FROM character_guild WHERE guild=@guild", new SqliteParameter("@guild", guildName));
-        foreach (List<object> row in table) {
-            GuildMember member = new GuildMember();
-            member.name = (string)row[0];
-            member.rank = (GuildRank)Convert.ToInt32((long)row[1]);
-
-            // is this player online right now? then use runtime data
-            if (Player.onlinePlayers.TryGetValue(member.name, out Player player))
-            {
-                member.online = true;
-                member.level = player.level;
-            }
-            else
-            {
-                member.online = false;
-                object scalar = ExecuteScalar("SELECT level FROM characters WHERE name=@character", new SqliteParameter("@character", member.name));
-                member.level = scalar != null ? Convert.ToInt32((long)scalar) : 1;
-            }
-            members.Add(member);
-        }
-        guild.members = members.ToArray();
-        return guild;
-    }
-
-    public void SaveGuild(Guild guild, bool useTransaction = true)
-    {
-        if (useTransaction) ExecuteNonQuery("BEGIN"); // transaction for performance
-
-        // guild info
-        ExecuteNonQuery("INSERT OR REPLACE INTO guild_info VALUES (@guild, @notice)",
-                        new SqliteParameter("@guild", guild.name),
-                        new SqliteParameter("@notice", guild.notice));
-
-        // members list
-        ExecuteNonQuery("DELETE FROM character_guild WHERE guild=@guild", new SqliteParameter("@guild", guild.name));
-        foreach (GuildMember member in guild.members)
-        {
-            ExecuteNonQuery("INSERT INTO character_guild VALUES (@character, @guild, @rank)",
-                            new SqliteParameter("@character", member.name),
-                            new SqliteParameter("@guild", guild.name),
-                            new SqliteParameter("@rank", member.rank));
-        }
-
-        if (useTransaction) ExecuteNonQuery("END");
-    }
-
-    public void RemoveGuild(string guild)
-    {
-        ExecuteNonQuery("BEGIN"); // transaction for performance
-        ExecuteNonQuery("DELETE FROM guild_info WHERE name=@name", new SqliteParameter("@name", guild));
-        ExecuteNonQuery("DELETE FROM character_guild WHERE guild=@guild", new SqliteParameter("@guild", guild));
         ExecuteNonQuery("END");
     }
 

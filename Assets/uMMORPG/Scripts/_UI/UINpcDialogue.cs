@@ -58,21 +58,6 @@ public partial class UINpcDialogue : MonoBehaviour
                 player.CmdNpcTeleport();
             });
 
-            // filter out the quests that are available for the player
-            List<ScriptableQuest> questsAvailable = npc.QuestsVisibleFor(player);
-            questsButton.gameObject.SetActive(questsAvailable.Count > 0);
-            questsButton.onClick.SetListener(() => {
-                npcQuestPanel.SetActive(true);
-                panel.SetActive(false);
-            });
-
-            // guild
-            guildButton.gameObject.SetActive(npc.offersGuildManagement);
-            guildButton.onClick.SetListener(() => {
-                npcGuildPanel.SetActive(true);
-                panel.SetActive(false);
-            });
-
             // summonable revive
             reviveButton.gameObject.SetActive(npc.offersSummonableRevive);
             reviveButton.onClick.SetListener(() => {

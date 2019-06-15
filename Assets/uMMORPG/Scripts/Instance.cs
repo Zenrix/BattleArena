@@ -124,21 +124,6 @@ public class Instance : MonoBehaviour
                     HashSet<Player> playersInInstanceBounds = FindAllPlayersInInstanceBounds();
 
                     int playersRemaining = 0;
-                    foreach (Player player in playersInInstanceBounds)
-                    {
-                        // in party for this instance? then count
-                        if (player.party.partyId == partyId)
-                        {
-                            ++playersRemaining;
-                        }
-                        // otherwise kick from instance
-                        else
-                        {
-                            Transform spawn = ((NetworkManagerMMO)NetworkManager.singleton).GetStartPositionFor(player.className);
-                            player.agent.Warp(spawn.position);
-                            Debug.Log("Removed player " + player.name + " with partyId=" + player.party.partyId + " from instance " + name + " with partyId=" + partyId);
-                        }
-                    }
 
                     // is no one is left then destroy the instance
                     if (playersRemaining == 0)
