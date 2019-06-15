@@ -32,7 +32,7 @@ public class AreaHealSkill : HealSkill
         HashSet<Entity> candidates = new HashSet<Entity>();
 
         // find all entities of same type in castRange around the caster
-        Collider[] colliders = Physics.OverlapSphere(caster.transform.position, castRange.Get(skillLevel));
+        Collider[] colliders = Physics.OverlapSphere(caster.transform.position, castRange);
         foreach (Collider co in colliders)
         {
             Entity candidate = co.GetComponentInParent<Entity>();
@@ -47,8 +47,8 @@ public class AreaHealSkill : HealSkill
         // apply to all candidates
         foreach (Entity candidate in candidates)
         {
-            candidate.health += healsHealth.Get(skillLevel);
-            candidate.mana += healsMana.Get(skillLevel);
+            candidate.health += healsHealth;
+            candidate.mana += healsMana;
 
             // show effect on candidate
             SpawnEffect(caster, candidate);

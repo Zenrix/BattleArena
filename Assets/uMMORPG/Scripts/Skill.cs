@@ -56,10 +56,10 @@ public partial struct Skill
         }
     }
     public string name => data.name;
-    public float castTime => data.castTime.Get(level);
-    public float cooldown => data.cooldown.Get(level);
-    public float castRange => data.castRange.Get(level);
-    public int manaCosts => data.manaCosts.Get(level);
+    public float castTime => data.castTime;
+    public float cooldown => data.cooldown;
+    public float castRange => data.castRange;
+    public int manaCosts => data.manaCosts;
     public bool followupDefaultAttack => data.followupDefaultAttack;
     public Sprite image => data.image;
     public bool learnDefault => data.learnDefault;
@@ -69,8 +69,6 @@ public partial struct Skill
     public ScriptableSkill predecessor => data.predecessor;
     public int predecessorLevel => data.predecessorLevel;
     public string requiredWeaponCategory => data.requiredWeaponCategory;
-    public int upgradeRequiredLevel => data.requiredLevel.Get(level+1);
-    public long upgradeRequiredSkillExperience => data.requiredSkillExperience.Get(level+1);
 
     // events
     public bool CheckSelf(Entity caster, bool checkSkillReady=true)
@@ -94,14 +92,6 @@ public partial struct Skill
 
         // addon system hooks
         Utils.InvokeMany(typeof(Skill), this, "ToolTip_", tip);
-
-        // only show upgrade if learned and not max level yet
-        if (0 < level && level < maxLevel)
-        {
-            tip.Append("\n<i>Upgrade:</i>\n" +
-                       "<i>  Required Level: " + upgradeRequiredLevel + "</i>\n" +
-                       "<i>  Required Skill Exp.: " + upgradeRequiredSkillExperience + "</i>\n");
-        }
 
         return tip.ToString();
     }

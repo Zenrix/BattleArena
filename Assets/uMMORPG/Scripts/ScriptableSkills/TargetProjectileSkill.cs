@@ -60,7 +60,7 @@ public class TargetProjectileSkill : DamageSkill
         if (caster.target != null)
         {
             destination = caster.target.collider.ClosestPoint(caster.transform.position);
-            return Utils.ClosestDistance(caster.collider, caster.target.collider) <= castRange.Get(skillLevel);
+            return Utils.ClosestDistance(caster.collider, caster.target.collider) <= castRange;
         }
         destination = caster.transform.position;
         return false;
@@ -82,9 +82,9 @@ public class TargetProjectileSkill : DamageSkill
             ProjectileSkillEffect effect = go.GetComponent<ProjectileSkillEffect>();
             effect.target = caster.target;
             effect.caster = caster;
-            effect.damage = damage.Get(skillLevel);
-            effect.stunChance = stunChance.Get(skillLevel);
-            effect.stunTime = stunTime.Get(skillLevel);
+            effect.damage = damage;
+            effect.stunChance = stunChance;
+            effect.stunTime = stunTime;
             NetworkServer.Spawn(go);
         }
         else Debug.LogWarning(name + ": missing projectile");

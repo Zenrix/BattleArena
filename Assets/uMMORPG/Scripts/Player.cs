@@ -27,9 +27,6 @@ using System.Linq;
 using System.Collections.Generic;
 using TMPro;
 
-public enum TradeStatus : byte {Free, Locked, Accepted}
-public enum CraftingState : byte {None, InProgress, Success, Failed}
-
 [Serializable]
 public partial struct SkillbarEntry
 {
@@ -94,7 +91,7 @@ public partial class Player : Entity
                                   select ((EquipmentItem)slot.item.data).healthBonus).Sum();
 
             // calculate strength bonus (1 strength means 1% of hpMax bonus)
-            int attributeBonus = Convert.ToInt32(_healthMax.Get(level) * (strength * 0.01f));
+            int attributeBonus = Convert.ToInt32(_healthMax * (strength * 0.01f));
 
             // base (health + buff) + equip + attributes
             return base.healthMax + equipmentBonus + attributeBonus;
@@ -112,7 +109,7 @@ public partial class Player : Entity
                                   select ((EquipmentItem)slot.item.data).manaBonus).Sum();
 
             // calculate intelligence bonus (1 intelligence means 1% of hpMax bonus)
-            int attributeBonus = Convert.ToInt32(_manaMax.Get(level) * (intelligence * 0.01f));
+            int attributeBonus = Convert.ToInt32(_manaMax * (intelligence * 0.01f));
 
             // base (mana + buff) + equip + attributes
             return base.manaMax + equipmentBonus + attributeBonus;
@@ -193,50 +190,6 @@ public partial class Player : Entity
     [SyncVar] public int strength = 0;
     [SyncVar] public int intelligence = 0;
 
-    [Header("Experience")] // note: int is not enough (can have > 2 mil. easily)
-    public int maxLevel = 1;
-    [SyncVar, SerializeField] long _experience = 0;
-    public long experience
-    {
-        get { return _experience; }
-        set
-        {
-            if (value <= _experience)
-            {
-                // decrease
-                _experience = Math.Max(value, 0);
-            }
-            else
-            {
-                // increase with level ups
-                // set the new value (which might be more than expMax)
-                _experience = value;
-
-                // now see if we leveled up (possibly more than once too)
-                // (can't level up if already max level)
-                while (_experience >= experienceMax && level < maxLevel)
-                {
-                    // subtract current level's required exp, then level up
-                    _experience -= experienceMax;
-                    ++level;
-
-                    // addon system hooks
-                    Utils.InvokeMany(typeof(Player), this, "OnLevelUp_");
-                }
-
-                // set to expMax if there is still too much exp remaining
-                if (_experience > experienceMax) _experience = experienceMax;
-            }
-        }
-    }
-
-    // required experience grows by 10% each level (like Runescape)
-    [SerializeField] protected ExponentialLong _experienceMax = new ExponentialLong{multiplier=100, baseValue=1.1f};
-    public long experienceMax { get { return _experienceMax.Get(level); } }
-
-    [Header("Skill Experience")]
-    [SyncVar] public long skillExperience = 0;
-
     [Header("Indicator")]
     public GameObject indicatorPrefab;
     [HideInInspector] public GameObject indicator;
@@ -284,17 +237,6 @@ public partial class Player : Entity
     [Header("PvP")]
     public BuffSkill offenderBuff;
     public BuffSkill murdererBuff;
-
-    [Header("Trading")]
-    [SyncVar, HideInInspector] public string tradeRequestFrom = "";
-    [SyncVar, HideInInspector] public TradeStatus tradeStatus = TradeStatus.Free;
-    [SyncVar, HideInInspector] public long tradeOfferGold = 0;
-    public SyncListInt tradeOfferItems = new SyncListInt(); // inventory indices
-
-    [Header("Crafting")]
-    public List<int> craftingIndices = Enumerable.Repeat(-1, ScriptableRecipe.recipeSize).ToList();
-    [HideInInspector] public CraftingState craftingState = CraftingState.None; // // client sided
-    [SyncVar, HideInInspector] public double craftingTimeEnd; // double for long term precision
 
     [Header("Item Mall")]
     public ItemMallCategory[] itemMallCategories; // the items that can be purchased in the item mall
@@ -429,9 +371,6 @@ public partial class Player : Entity
     {
         base.OnStartServer();
 
-        // initialize trade item indices
-        for (int i = 0; i < 6; ++i) tradeOfferItems.Add(-1);
-
         InvokeRepeating(nameof(ProcessCoinOrders), 5, 5);
 
         // addon system hooks
@@ -554,32 +493,6 @@ public partial class Player : Entity
         return state == "MOVING" && !IsMoving(); // only fire when stopped moving
     }
 
-    bool EventTradeStarted()
-    {
-        // did someone request a trade? and did we request a trade with him too?
-        Player player = FindPlayerFromTradeInvitation();
-        return player != null && player.tradeRequestFrom == name;
-    }
-
-    bool EventTradeDone()
-    {
-        // trade canceled or finished?
-        return state == "TRADING" && tradeRequestFrom == "";
-    }
-
-    bool craftingRequested;
-    bool EventCraftingStarted()
-    {
-        bool result = craftingRequested;
-        craftingRequested = false;
-        return result;
-    }
-
-    bool EventCraftingDone()
-    {
-        return state == "CRAFTING" && NetworkTime.time > craftingTimeEnd;
-    }
-
     bool EventStunned()
     {
         return NetworkTime.time <= stunTimeEnd;
@@ -627,19 +540,6 @@ public partial class Player : Entity
             target = null;
             return "IDLE";
         }
-        if (EventTradeStarted())
-        {
-            // cancel casting (if any), set target, go to trading
-            currentSkill = -1; // just in case
-            target = FindPlayerFromTradeInvitation();
-            return "TRADING";
-        }
-        if (EventCraftingStarted())
-        {
-            // cancel casting (if any), go to crafting
-            currentSkill = -1; // just in case
-            return "CRAFTING";
-        }
         if (EventMoveStart())
         {
             // cancel casting (if any)
@@ -677,8 +577,6 @@ public partial class Player : Entity
         }
         if (EventSkillFinished()) {} // don't care
         if (EventMoveEnd()) {} // don't care
-        if (EventTradeDone()) {} // don't care
-        if (EventCraftingDone()) {} // don't care
         if (EventRespawn()) {} // don't care
         if (EventTargetDied()) {} // don't care
         if (EventTargetDisappeared()) {} // don't care
@@ -713,21 +611,6 @@ public partial class Player : Entity
             //rubberbanding.ResetMovement(); <- done locally. doing it here would reset localplayer to the slightly behind server position otherwise
             return "IDLE";
         }
-        if (EventTradeStarted())
-        {
-            // cancel casting (if any), stop moving, set target, go to trading
-            currentSkill = -1;
-            rubberbanding.ResetMovement();
-            target = FindPlayerFromTradeInvitation();
-            return "TRADING";
-        }
-        if (EventCraftingStarted())
-        {
-            // cancel casting (if any), stop moving, go to crafting
-            currentSkill = -1;
-            rubberbanding.ResetMovement();
-            return "CRAFTING";
-        }
         // SPECIAL CASE: Skill Request while doing rubberband movement
         // -> we don't really need to react to it
         // -> we could just wait for move to end, then react to request in IDLE
@@ -759,8 +642,6 @@ public partial class Player : Entity
         }
         if (EventMoveStart()) {} // don't care
         if (EventSkillFinished()) {} // don't care
-        if (EventTradeDone()) {} // don't care
-        if (EventCraftingDone()) {} // don't care
         if (EventRespawn()) {} // don't care
         if (EventTargetDied()) {} // don't care
         if (EventTargetDisappeared()) {} // don't care
@@ -832,17 +713,6 @@ public partial class Player : Entity
             UseNextTargetIfAny(); // if user selected a new target while casting
             return "IDLE";
         }
-        if (EventTradeStarted())
-        {
-            // cancel casting (if any), stop moving, set target, go to trading
-            currentSkill = -1;
-            rubberbanding.ResetMovement();
-
-            // set target to trade target instead of next target (clear that)
-            target = FindPlayerFromTradeInvitation();
-            nextTarget = null;
-            return "TRADING";
-        }
         if (EventTargetDisappeared())
         {
             // cancel if the target matters for this skill
@@ -890,9 +760,6 @@ public partial class Player : Entity
             return "IDLE";
         }
         if (EventMoveEnd()) {} // don't care
-        if (EventTradeDone()) {} // don't care
-        if (EventCraftingStarted()) {} // don't care
-        if (EventCraftingDone()) {} // don't care
         if (EventRespawn()) {} // don't care
         if (EventSkillRequest()) {} // don't care
 
@@ -920,108 +787,6 @@ public partial class Player : Entity
     }
 
     [Server]
-    string UpdateServer_TRADING()
-    {
-        // events sorted by priority (e.g. target doesn't matter if we died)
-        if (EventDied())
-        {
-            // we died, stop trading. other guy will receive targetdied event.
-            OnDeath();
-            TradeCleanup();
-            return "DEAD";
-        }
-        if (EventStunned())
-        {
-            // stop trading
-            currentSkill = -1;
-            rubberbanding.ResetMovement();
-            TradeCleanup();
-            return "STUNNED";
-        }
-        if (EventMoveStart())
-        {
-            // reject movement while trading
-            rubberbanding.ResetMovement();
-            return "TRADING";
-        }
-        if (EventCancelAction())
-        {
-            // stop trading
-            TradeCleanup();
-            return "IDLE";
-        }
-        if (EventTargetDisappeared())
-        {
-            // target disconnected, stop trading
-            TradeCleanup();
-            return "IDLE";
-        }
-        if (EventTargetDied())
-        {
-            // target died, stop trading
-            TradeCleanup();
-            return "IDLE";
-        }
-        if (EventTradeDone())
-        {
-            // someone canceled or we finished the trade. stop trading
-            TradeCleanup();
-            return "IDLE";
-        }
-        if (EventMoveEnd()) {} // don't care
-        if (EventSkillFinished()) {} // don't care
-        if (EventCraftingStarted()) {} // don't care
-        if (EventCraftingDone()) {} // don't care
-        if (EventRespawn()) {} // don't care
-        if (EventTradeStarted()) {} // don't care
-        if (EventSkillRequest()) {} // don't care
-
-        return "TRADING"; // nothing interesting happened
-    }
-
-    [Server]
-    string UpdateServer_CRAFTING()
-    {
-        // events sorted by priority (e.g. target doesn't matter if we died)
-        if (EventDied())
-        {
-            // we died, stop crafting
-            OnDeath();
-            return "DEAD";
-        }
-        if (EventStunned())
-        {
-            // stop crafting
-            rubberbanding.ResetMovement();
-            return "STUNNED";
-        }
-        if (EventMoveStart())
-        {
-            // reject movement while crafting
-            rubberbanding.ResetMovement();
-            return "CRAFTING";
-        }
-        if (EventCraftingDone())
-        {
-            // finish crafting
-            Craft();
-            return "IDLE";
-        }
-        if (EventCancelAction()) {} // don't care. user pressed craft, we craft.
-        if (EventTargetDisappeared()) {} // don't care
-        if (EventTargetDied()) {} // don't care
-        if (EventMoveEnd()) {} // don't care
-        if (EventSkillFinished()) {} // don't care
-        if (EventRespawn()) {} // don't care
-        if (EventTradeStarted()) {} // don't care
-        if (EventTradeDone()) {} // don't care
-        if (EventCraftingStarted()) {} // don't care
-        if (EventSkillRequest()) {} // don't care
-
-        return "CRAFTING"; // nothing interesting happened
-    }
-
-    [Server]
     string UpdateServer_DEAD()
     {
         // events sorted by priority (e.g. target doesn't matter if we died)
@@ -1044,10 +809,6 @@ public partial class Player : Entity
         if (EventSkillFinished()) {} // don't care
         if (EventDied()) {} // don't care
         if (EventCancelAction()) {} // don't care
-        if (EventTradeStarted()) {} // don't care
-        if (EventTradeDone()) {} // don't care
-        if (EventCraftingStarted()) {} // don't care
-        if (EventCraftingDone()) {} // don't care
         if (EventTargetDisappeared()) {} // don't care
         if (EventTargetDied()) {} // don't care
         if (EventSkillRequest()) {} // don't care
@@ -1062,8 +823,6 @@ public partial class Player : Entity
         if (state == "MOVING")   return UpdateServer_MOVING();
         if (state == "CASTING")  return UpdateServer_CASTING();
         if (state == "STUNNED")  return UpdateServer_STUNNED();
-        if (state == "TRADING")  return UpdateServer_TRADING();
-        if (state == "CRAFTING") return UpdateServer_CRAFTING();
         if (state == "DEAD")     return UpdateServer_DEAD();
         Debug.LogError("invalid state:" + state);
         return "IDLE";
@@ -1261,57 +1020,10 @@ public partial class Player : Entity
         if (health > 0 && AttributesSpendable() > 0) ++intelligence;
     }
 
-    // combat //////////////////////////////////////////////////////////////////
-    // helper function to calculate the experience rewards for sharing parties
-    public static long CalculatePartyExperienceShare(long total, int memberCount, float bonusPercentagePerMember, int memberLevel, int killedLevel)
-    {
-        // bonus percentage based on how many members there are
-        float bonusPercentage = (memberCount-1) * bonusPercentagePerMember;
-
-        // calculate the share via ceil, so that uneven numbers still result in
-        // at least 'total' in the end. for example:
-        //   4/2=2 (good)
-        //   5/2=2 (bad. 1 point got lost)
-        //   ceil(5/(float)2) = 3 (good!)
-        long share = (long)Mathf.Ceil(total / (float)memberCount);
-
-        // balance experience reward for the receiver's level. this is important
-        // to avoid crazy power leveling where a level 1 hero would get a LOT of
-        // level ups if his friend kills a level 100 monster once.
-        long balanced = BalanceExpReward(share, memberLevel, killedLevel);
-        long bonus = Convert.ToInt64(balanced * bonusPercentage);
-
-        return balanced + bonus;
-    }
-
     [Server]
     public void OnDamageDealtToMonster(Monster monster)
     {
-        // did we kill it?
-        if (monster.health == 0)
-        {
-            // share kill rewards with party or only for self
-            List<Player> closeMembers = new List<Player>();
 
-            // share experience & skill experience
-            // note: bonus only applies to exp. share parties, otherwise
-            //       there's an unnecessary pressure to always join a
-            //       party when leveling alone too.
-            // note: if monster.rewardExp is 10 then it's possible that
-            //       two members only receive 2 exp each (= 4 total).
-            //       this happens because of exp balancing by level and
-            //       is as intended.
-
-            skillExperience += BalanceExpReward(monster.rewardSkillExperience, level, monster.level);
-            experience += BalanceExpReward(monster.rewardExperience, level, monster.level);
-
-            // give pet the same exp without dividing it, but balance it
-            // => AFTER player exp reward! pet can only ever level up to player
-            //    level, so it's best if the player gets exp and level-ups
-            //    first, then afterwards we try to level up the pet.
-            if (activePet != null)
-                activePet.experience += BalanceExpReward(monster.rewardExperience, activePet.level, monster.level);
-        }
     }
 
     [Server]
@@ -1376,47 +1088,6 @@ public partial class Player : Entity
         Utils.InvokeMany(typeof(Player), this, "DealDamageAt_", entity, amount);
     }
 
-    // experience //////////////////////////////////////////////////////////////
-    public float ExperiencePercent()
-    {
-        return (experience != 0 && experienceMax != 0) ? (float)experience / (float)experienceMax : 0;
-    }
-
-    // players gain exp depending on their level. if a player has a lower level
-    // than the monster, then he gains more exp (up to 100% more) and if he has
-    // a higher level, then he gains less exp (up to 100% less)
-    // -> test with monster level 20 and expreward of 100:
-    //   BalanceExpReward( 1, 20, 100)); => 200
-    //   BalanceExpReward( 9, 20, 100)); => 200
-    //   BalanceExpReward(10, 20, 100)); => 200
-    //   BalanceExpReward(11, 20, 100)); => 190
-    //   BalanceExpReward(12, 20, 100)); => 180
-    //   BalanceExpReward(13, 20, 100)); => 170
-    //   BalanceExpReward(14, 20, 100)); => 160
-    //   BalanceExpReward(15, 20, 100)); => 150
-    //   BalanceExpReward(16, 20, 100)); => 140
-    //   BalanceExpReward(17, 20, 100)); => 130
-    //   BalanceExpReward(18, 20, 100)); => 120
-    //   BalanceExpReward(19, 20, 100)); => 110
-    //   BalanceExpReward(20, 20, 100)); => 100
-    //   BalanceExpReward(21, 20, 100)); =>  90
-    //   BalanceExpReward(22, 20, 100)); =>  80
-    //   BalanceExpReward(23, 20, 100)); =>  70
-    //   BalanceExpReward(24, 20, 100)); =>  60
-    //   BalanceExpReward(25, 20, 100)); =>  50
-    //   BalanceExpReward(26, 20, 100)); =>  40
-    //   BalanceExpReward(27, 20, 100)); =>  30
-    //   BalanceExpReward(28, 20, 100)); =>  20
-    //   BalanceExpReward(29, 20, 100)); =>  10
-    //   BalanceExpReward(30, 20, 100)); =>   0
-    //   BalanceExpReward(31, 20, 100)); =>   0
-    public static long BalanceExpReward(long reward, int attackerLevel, int victimLevel)
-    {
-        int levelDiff = Mathf.Clamp(victimLevel - attackerLevel, -20, 20);
-        float multiplier = 1 + levelDiff * 0.1f;
-        return Convert.ToInt64(reward * multiplier);
-    }
-
     // aggro ///////////////////////////////////////////////////////////////////
     // this function is called by entities that attack us
     [ServerCallback]
@@ -1436,13 +1107,6 @@ public partial class Player : Entity
 
         // rubberbanding needs a custom reset
         rubberbanding.ResetMovement();
-
-        // lose experience
-        long loss = Convert.ToInt64(experienceMax * deathExperienceLossPercent);
-        experience -= loss;
-
-        // send an info chat message
-        chat.TargetMsgInfo("You died and lost " + loss + " experience.");
 
         // addon system hooks
         Utils.InvokeMany(typeof(Player), this, "OnDeath_");
@@ -1494,8 +1158,7 @@ public partial class Player : Entity
     {
         return state == "IDLE" ||
                state == "MOVING" ||
-               state == "CASTING" ||
-               (state == "TRADING" && tradeStatus == TradeStatus.Free);
+               state == "CASTING";
     }
 
     [Command]
@@ -1849,38 +1512,6 @@ public partial class Player : Entity
         return skills.Any(skill => skill.name == skillName && skill.level >= skillLevel);
     }
 
-    // helper function for command and UI
-    // -> this is for learning and upgrading!
-    public bool CanUpgradeSkill(Skill skill)
-    {
-        return skill.level < skill.maxLevel &&
-               level >= skill.upgradeRequiredLevel &&
-               skillExperience >= skill.upgradeRequiredSkillExperience &&
-               (skill.predecessor == null || (HasLearnedSkillWithLevel(skill.predecessor.name, skill.predecessorLevel)));
-    }
-
-    // -> this is for learning and upgrading!
-    [Command]
-    public void CmdUpgradeSkill(int skillIndex)
-    {
-        // validate
-        if ((state == "IDLE" || state == "MOVING" || state == "CASTING") &&
-            0 <= skillIndex && skillIndex < skills.Count)
-        {
-            // can be upgraded?
-            Skill skill = skills[skillIndex];
-            if (CanUpgradeSkill(skill))
-            {
-                // decrease skill experience
-                skillExperience -= skill.upgradeRequiredSkillExperience;
-
-                // upgrade
-                ++skill.level;
-                skills[skillIndex] = skill;
-            }
-        }
-    }
-
     // skillbar ////////////////////////////////////////////////////////////////
     //[Client] <- disabled while UNET OnDestroy isLocalPlayer bug exists
     void SaveSkillbar()
@@ -1923,464 +1554,6 @@ public partial class Player : Entity
                 skillbar[i].reference = learned[i].name;
             }
         }
-    }
-
-    // npc trading /////////////////////////////////////////////////////////////
-    [Command]
-    public void CmdNpcBuyItem(int index, int amount)
-    {
-        // validate: close enough, npc alive and valid index?
-        // use collider point(s) to also work with big entities
-        if (state == "IDLE" &&
-            target != null &&
-            target.health > 0 &&
-            target is Npc &&
-            Utils.ClosestDistance(collider, target.collider) <= interactionRange &&
-            0 <= index && index < ((Npc)target).saleItems.Length)
-        {
-            // valid amount?
-            Item npcItem = new Item(((Npc)target).saleItems[index]);
-            if (1 <= amount && amount <= npcItem.maxStack)
-            {
-                long price = npcItem.buyPrice * amount;
-
-                // enough gold and enough space in inventory?
-                if (gold >= price && InventoryCanAdd(npcItem, amount))
-                {
-                    // pay for it, add to inventory
-                    gold -= price;
-                    InventoryAdd(npcItem, amount);
-                }
-            }
-        }
-    }
-
-    [Command]
-    public void CmdNpcSellItem(int index, int amount)
-    {
-        // validate: close enough, npc alive and valid index and valid item?
-        // use collider point(s) to also work with big entities
-        if (state == "IDLE" &&
-            target != null &&
-            target.health > 0 &&
-            target is Npc &&
-            Utils.ClosestDistance(collider, target.collider) <= interactionRange &&
-            0 <= index && index < inventory.Count)
-        {
-            // sellable?
-            ItemSlot slot = inventory[index];
-            if (slot.amount > 0 && slot.item.sellable && !slot.item.summoned)
-            {
-                // valid amount?
-                if (1 <= amount && amount <= slot.amount)
-                {
-                    // sell the amount
-                    long price = slot.item.sellPrice * amount;
-                    gold += price;
-                    slot.DecreaseAmount(amount);
-                    inventory[index] = slot;
-                }
-            }
-        }
-    }
-
-    // npc teleport ////////////////////////////////////////////////////////////
-    [Command]
-    public void CmdNpcTeleport()
-    {
-        // validate
-        if (state == "IDLE" &&
-            target != null &&
-            target.health > 0 &&
-            target is Npc &&
-            Utils.ClosestDistance(collider, target.collider) <= interactionRange &&
-            ((Npc)target).teleportTo != null)
-        {
-            // using agent.Warp is recommended over transform.position
-            // (the latter can cause weird bugs when using it with an agent)
-            agent.Warp(((Npc)target).teleportTo.position);
-
-            // clear target. no reason to keep targeting the npc after we
-            // teleported away from it
-            target = null;
-        }
-    }
-
-    // player to player trading ////////////////////////////////////////////////
-    // how trading works:
-    // 1. A invites his target with CmdTradeRequest()
-    //    -> sets B.tradeInvitationFrom = A;
-    // 2. B sees a UI window and accepts (= invites A too)
-    //    -> sets A.tradeInvitationFrom = B;
-    // 3. the TradeStart event is fired, both go to 'TRADING' state
-    // 4. they lock the trades
-    // 5. they accept, then items and gold are swapped
-
-    public bool CanStartTrade()
-    {
-        // a player can only trade if he is not trading already and alive
-        return health > 0 && state != "TRADING";
-    }
-
-    public bool CanStartTradeWith(Entity entity)
-    {
-        // can we trade? can the target trade? are we close enough?
-        return entity != null && entity is Player && entity != this &&
-               CanStartTrade() && ((Player)entity).CanStartTrade() &&
-               Utils.ClosestDistance(collider, entity.collider) <= interactionRange;
-    }
-
-    // request a trade with the target player.
-    [Command]
-    public void CmdTradeRequestSend()
-    {
-        // validate
-        if (CanStartTradeWith(target))
-        {
-            // send a trade request to target
-            ((Player)target).tradeRequestFrom = name;
-            print(name + " invited " + target.name + " to trade");
-        }
-    }
-
-    // helper function to find the guy who sent us a trade invitation
-    [Server]
-    Player FindPlayerFromTradeInvitation()
-    {
-        if (tradeRequestFrom != "" && onlinePlayers.ContainsKey(tradeRequestFrom))
-            return onlinePlayers[tradeRequestFrom];
-        return null;
-    }
-
-    // accept a trade invitation by simply setting 'requestFrom' for the other
-    // person to self
-    [Command]
-    public void CmdTradeRequestAccept()
-    {
-        Player sender = FindPlayerFromTradeInvitation();
-        if (sender != null)
-        {
-            if (CanStartTradeWith(sender))
-            {
-                // also send a trade request to the person that invited us
-                sender.tradeRequestFrom = name;
-                print(name + " accepted " + sender.name + "'s trade request");
-            }
-        }
-    }
-
-    // decline a trade invitation
-    [Command]
-    public void CmdTradeRequestDecline()
-    {
-        tradeRequestFrom = "";
-    }
-
-    [Server]
-    void TradeCleanup()
-    {
-        // clear all trade related properties
-        tradeOfferGold = 0;
-        for (int i = 0; i < tradeOfferItems.Count; ++i) tradeOfferItems[i] = -1;
-        tradeStatus = TradeStatus.Free;
-        tradeRequestFrom = "";
-    }
-
-    [Command]
-    public void CmdTradeCancel()
-    {
-        // validate
-        if (state == "TRADING")
-        {
-            // clear trade request for both guys. the FSM event will do the rest
-            Player player = FindPlayerFromTradeInvitation();
-            if (player != null) player.tradeRequestFrom = "";
-            tradeRequestFrom = "";
-        }
-    }
-
-    [Command]
-    public void CmdTradeOfferLock()
-    {
-        // validate
-        if (state == "TRADING")
-            tradeStatus = TradeStatus.Locked;
-    }
-
-    [Command]
-    public void CmdTradeOfferGold(long amount)
-    {
-        // validate
-        if (state == "TRADING" && tradeStatus == TradeStatus.Free &&
-            0 <= amount && amount <= gold)
-            tradeOfferGold = amount;
-    }
-
-    [Command]
-    public void CmdTradeOfferItem(int inventoryIndex, int offerIndex)
-    {
-        // validate
-        if (state == "TRADING" && tradeStatus == TradeStatus.Free &&
-            0 <= offerIndex && offerIndex < tradeOfferItems.Count &&
-            !tradeOfferItems.Contains(inventoryIndex) && // only one reference
-            0 <= inventoryIndex && inventoryIndex < inventory.Count)
-        {
-            ItemSlot slot = inventory[inventoryIndex];
-            if (slot.amount > 0 && slot.item.tradable && !slot.item.summoned)
-                tradeOfferItems[offerIndex] = inventoryIndex;
-        }
-    }
-
-    [Command]
-    public void CmdTradeOfferItemClear(int offerIndex)
-    {
-        // validate
-        if (state == "TRADING" && tradeStatus == TradeStatus.Free &&
-            0 <= offerIndex && offerIndex < tradeOfferItems.Count)
-            tradeOfferItems[offerIndex] = -1;
-    }
-
-    [Server]
-    bool IsTradeOfferStillValid()
-    {
-        // enough gold and all offered items are -1 or valid?
-        return gold >= tradeOfferGold &&
-               tradeOfferItems.All(index => index == -1 ||
-                                            (0 <= index && index < inventory.Count && inventory[index].amount > 0));
-    }
-
-    [Server]
-    int TradeOfferItemSlotAmount()
-    {
-        return tradeOfferItems.Count(i => i != -1);
-    }
-
-    [Server]
-    int InventorySlotsNeededForTrade()
-    {
-        // if other guy offers 2 items and we offer 1 item then we only need
-        // 2-1 = 1 slots. and the other guy would need 1-2 slots and at least 0.
-        if (target != null && target is Player)
-        {
-            Player other = (Player)target;
-            int otherAmount = other.TradeOfferItemSlotAmount();
-            int myAmount = TradeOfferItemSlotAmount();
-            return Mathf.Max(otherAmount - myAmount, 0);
-        }
-        return 0;
-    }
-
-    [Command]
-    public void CmdTradeOfferAccept()
-    {
-        // validate
-        // note: distance check already done when starting the trade
-        if (state == "TRADING" && tradeStatus == TradeStatus.Locked &&
-            target != null && target is Player)
-        {
-            Player other = (Player)target;
-
-            // other has locked?
-            if (other.tradeStatus == TradeStatus.Locked)
-            {
-                //  simply accept and wait for the other guy to accept too
-                tradeStatus = TradeStatus.Accepted;
-                print("first accept by " + name);
-            }
-            // other has accepted already? then both accepted now, start trade.
-            else if (other.tradeStatus == TradeStatus.Accepted)
-            {
-                // accept
-                tradeStatus = TradeStatus.Accepted;
-                print("second accept by " + name);
-
-                // both offers still valid?
-                if (IsTradeOfferStillValid() && other.IsTradeOfferStillValid())
-                {
-                    // both have enough inventory slots?
-                    // note: we don't use InventoryCanAdd here because:
-                    // - current solution works if both have full inventories
-                    // - InventoryCanAdd only checks one slot. here we have
-                    //   multiple slots though (it could happen that we can
-                    //   not add slot 2 after we did add slot 1's items etc)
-                    if (InventorySlotsFree() >= InventorySlotsNeededForTrade() &&
-                        other.InventorySlotsFree() >= other.InventorySlotsNeededForTrade())
-                    {
-                        // exchange the items by first taking them out
-                        // into a temporary list and then putting them
-                        // in. this guarantees that exchanging even
-                        // works with full inventories
-
-                        // take them out
-                        Queue<ItemSlot> tempMy = new Queue<ItemSlot>();
-                        foreach (int index in tradeOfferItems)
-                        {
-                            if (index != -1)
-                            {
-                                ItemSlot slot = inventory[index];
-                                tempMy.Enqueue(slot);
-                                slot.amount = 0;
-                                inventory[index] = slot;
-                            }
-                        }
-
-                        Queue<ItemSlot> tempOther = new Queue<ItemSlot>();
-                        foreach (int index in other.tradeOfferItems)
-                        {
-                            if (index != -1)
-                            {
-                                ItemSlot slot = other.inventory[index];
-                                tempOther.Enqueue(slot);
-                                slot.amount = 0;
-                                other.inventory[index] = slot;
-                            }
-                        }
-
-                        // put them into the free slots
-                        for (int i = 0; i < inventory.Count; ++i)
-                            if (inventory[i].amount == 0 && tempOther.Count > 0)
-                                inventory[i] = tempOther.Dequeue();
-
-                        for (int i = 0; i < other.inventory.Count; ++i)
-                            if (other.inventory[i].amount == 0 && tempMy.Count > 0)
-                                other.inventory[i] = tempMy.Dequeue();
-
-                        // did it all work?
-                        if (tempMy.Count > 0 || tempOther.Count > 0)
-                            Debug.LogWarning("item trade problem");
-
-                        // exchange the gold
-                        gold -= tradeOfferGold;
-                        other.gold -= other.tradeOfferGold;
-
-                        gold += other.tradeOfferGold;
-                        other.gold += tradeOfferGold;
-                    }
-                }
-                else print("trade canceled (invalid offer)");
-
-                // clear trade request for both guys. the FSM event will do the
-                // rest
-                tradeRequestFrom = "";
-                other.tradeRequestFrom = "";
-            }
-        }
-    }
-
-    // crafting ////////////////////////////////////////////////////////////////
-    // the crafting system is designed to work with all kinds of commonly known
-    // crafting options:
-    // - item combinations: wood + stone = axe
-    // - weapon upgrading: axe + gem = strong axe
-    // - recipe items: axerecipe(item) + wood(item) + stone(item) = axe(item)
-    //
-    // players can craft at all times, not just at npcs, because that's the most
-    // realistic option
-
-    // craft the current combination of items and put result into inventory
-    [Command]
-    public void CmdCraft(int[] indices)
-    {
-        // validate: between 1 and 6, all valid, no duplicates?
-        // -> can be IDLE or MOVING (in which case we reset the movement)
-        if ((state == "IDLE" || state == "MOVING") &&
-            indices.Length == ScriptableRecipe.recipeSize)
-        {
-            // find valid indices that are not '-1' and make sure there are no
-            // duplicates
-            List<int> validIndices = indices.Where(index => 0 <= index && index < inventory.Count && inventory[index].amount > 0).ToList();
-            if (validIndices.Count > 0 && !validIndices.HasDuplicates())
-            {
-                // build list of item templates from valid indices
-                List<ItemSlot> items = validIndices.Select(index => inventory[index]).ToList();
-
-                // find recipe
-                ScriptableRecipe recipe = ScriptableRecipe.dict.Values.ToList().Find(r => r.CanCraftWith(items)); // good enough for now
-                if (recipe != null && recipe.result != null)
-                {
-                    // enough space?
-                    Item result = new Item(recipe.result);
-                    if (InventoryCanAdd(result, 1))
-                    {
-                        // store the crafting indices on the server. no need for
-                        // a SyncList and unnecessary broadcasting.
-                        // we already have a 'craftingIndices' variable anyway.
-                        craftingIndices = indices.ToList();
-
-                        // start crafting
-                        craftingRequested = true;
-                        craftingTimeEnd = NetworkTime.time + recipe.craftingTime;
-                    }
-                }
-            }
-        }
-    }
-
-    // finish the crafting
-    [Server]
-    void Craft()
-    {
-        // should only be called while CRAFTING
-        // -> we already validated everything in CmdCraft. let's just craft.
-        if (state == "CRAFTING")
-        {
-            // build list of item templates from indices
-            List<int> validIndices = craftingIndices.Where(index => 0 <= index && index < inventory.Count && inventory[index].amount > 0).ToList();
-            List<ItemSlot> items = validIndices.Select(index => inventory[index]).ToList();
-
-            // find recipe
-            ScriptableRecipe recipe = ScriptableRecipe.dict.Values.ToList().Find(r => r.CanCraftWith(items)); // good enough for now
-            if (recipe != null && recipe.result != null)
-            {
-                // enough space?
-                Item result = new Item(recipe.result);
-                if (InventoryCanAdd(result, 1))
-                {
-                    // remove the ingredients from inventory in any case
-                    foreach (ScriptableItemAndAmount ingredient in recipe.ingredients)
-                        if (ingredient.amount > 0 && ingredient.item != null)
-                            InventoryRemove(new Item(ingredient.item), ingredient.amount);
-
-                    // roll the dice to decide if we add the result or not
-                    // IMPORTANT: we use rand() < probability to decide.
-                    // => UnityEngine.Random.value is [0,1] inclusive:
-                    //    for 0% probability it's fine because it's never '< 0'
-                    //    for 100% probability it's not because it's not always '< 1', it might be == 1
-                    //    and if we use '<=' instead then it won't work for 0%
-                    // => C#'s Random value is [0,1) exclusive like most random
-                    //    functions. this works fine.
-                    if (new System.Random().NextDouble() < recipe.probability)
-                    {
-                        // add result item to inventory
-                        InventoryAdd(new Item(recipe.result), 1);
-                        TargetCraftingSuccess();
-                    }
-                    else
-                    {
-                        TargetCraftingFailed();
-                    }
-
-                    // clear indices afterwards
-                    // note: we set all to -1 instead of calling .Clear because
-                    //       that would clear all the slots in host mode.
-                    for (int i = 0; i < ScriptableRecipe.recipeSize; ++i)
-                        craftingIndices[i] = -1;
-                }
-            }
-        }
-    }
-
-    // two rpcs for results to save 1 byte for the actual result
-    [TargetRpc] // only send to one client
-    public void TargetCraftingSuccess()
-    {
-        craftingState = CraftingState.Success;
-    }
-
-    [TargetRpc] // only send to one client
-    public void TargetCraftingFailed()
-    {
-        craftingState = CraftingState.Failed;
     }
 
     // pvp murder system ///////////////////////////////////////////////////////
@@ -2509,39 +1682,6 @@ public partial class Player : Entity
         }
     }
 
-    [Command]
-    public void CmdNpcReviveSummonable(int index)
-    {
-        // validate: close enough, npc alive and valid index and valid item?
-        // use collider point(s) to also work with big entities
-        if (state == "IDLE" &&
-            target != null &&
-            target.health > 0 &&
-            target is Npc &&
-            ((Npc)target).offersSummonableRevive &&
-            Utils.ClosestDistance(collider, target.collider) <= interactionRange &&
-            0 <= index && index < inventory.Count)
-        {
-            ItemSlot slot = inventory[index];
-            if (slot.amount > 0 && slot.item.data is SummonableItem)
-            {
-                // verify the pet status
-                SummonableItem itemData = (SummonableItem)slot.item.data;
-                if (slot.item.summonedHealth == 0 && itemData.summonPrefab != null)
-                {
-                    // enough gold?
-                    if (gold >= itemData.revivePrice)
-                    {
-                        // pay for it, revive it
-                        gold -= itemData.revivePrice;
-                        slot.item.summonedHealth = itemData.summonPrefab.healthMax;
-                        inventory[index] = slot;
-                    }
-                }
-            }
-        }
-    }
-
     // mounts //////////////////////////////////////////////////////////////////
     public bool IsMounted()
     {
@@ -2622,13 +1762,6 @@ public partial class Player : Entity
                         {
                             // then try to use that one
                             TryUseSkill(0);
-                        }
-                        // npc, alive, close enough? => talk
-                        // use collider point(s) to also work with big entities
-                        else if (entity is Npc && entity.health > 0 &&
-                                 Utils.ClosestDistance(collider, entity.collider) <= interactionRange)
-                        {
-                            UINpcDialogue.singleton.Show();
                         }
                         // monster, dead, has loot, close enough? => loot
                         // use collider point(s) to also work with big entities
@@ -2814,38 +1947,6 @@ public partial class Player : Entity
         skillbar[slotIndices[1]].reference = inventory[slotIndices[0]].item.name; // just save it clientsided
     }
 
-    void OnDragAndDrop_InventorySlot_NpcSellSlot(int[] slotIndices)
-    {
-        // slotIndices[0] = slotFrom; slotIndices[1] = slotTo
-        ItemSlot slot = inventory[slotIndices[0]];
-        if (slot.item.sellable && !slot.item.summoned)
-        {
-            UINpcTrading.singleton.sellIndex = slotIndices[0];
-            UINpcTrading.singleton.sellAmountInput.text = slot.amount.ToString();
-        }
-    }
-
-    void OnDragAndDrop_InventorySlot_TradingSlot(int[] slotIndices)
-    {
-        // slotIndices[0] = slotFrom; slotIndices[1] = slotTo
-        if (inventory[slotIndices[0]].item.tradable)
-            CmdTradeOfferItem(slotIndices[0], slotIndices[1]);
-    }
-
-    void OnDragAndDrop_InventorySlot_CraftingIngredientSlot(int[] slotIndices)
-    {
-        // slotIndices[0] = slotFrom; slotIndices[1] = slotTo
-        // only if not crafting right now
-        if (craftingState != CraftingState.InProgress)
-        {
-            if (!craftingIndices.Contains(slotIndices[0]))
-            {
-                craftingIndices[slotIndices[1]] = slotIndices[0];
-                craftingState = CraftingState.None; // reset state
-            }
-        }
-    }
-
     void OnDragAndDrop_TrashSlot_InventorySlot(int[] slotIndices)
     {
         // slotIndices[0] = slotFrom; slotIndices[1] = slotTo
@@ -2879,55 +1980,9 @@ public partial class Player : Entity
         skillbar[slotIndices[1]].reference = temp;
     }
 
-    void OnDragAndDrop_CraftingIngredientSlot_CraftingIngredientSlot(int[] slotIndices)
-    {
-        // slotIndices[0] = slotFrom; slotIndices[1] = slotTo
-        // only if not crafting right now
-        if (craftingState != CraftingState.InProgress)
-        {
-            // just swap them clientsided
-            int temp = craftingIndices[slotIndices[0]];
-            craftingIndices[slotIndices[0]] = craftingIndices[slotIndices[1]];
-            craftingIndices[slotIndices[1]] = temp;
-            craftingState = CraftingState.None; // reset state
-        }
-    }
-
-    void OnDragAndDrop_InventorySlot_NpcReviveSlot(int[] slotIndices)
-    {
-        // slotIndices[0] = slotFrom; slotIndices[1] = slotTo
-        if (inventory[slotIndices[0]].item.data is SummonableItem)
-            UINpcRevive.singleton.itemIndex = slotIndices[0];
-    }
-
     void OnDragAndClear_SkillbarSlot(int slotIndex)
     {
         skillbar[slotIndex].reference = "";
-    }
-
-    void OnDragAndClear_TradingSlot(int slotIndex)
-    {
-        CmdTradeOfferItemClear(slotIndex);
-    }
-
-    void OnDragAndClear_NpcSellSlot(int slotIndex)
-    {
-        UINpcTrading.singleton.sellIndex = -1;
-    }
-
-    void OnDragAndClear_CraftingIngredientSlot(int slotIndex)
-    {
-        // only if not crafting right now
-        if (craftingState != CraftingState.InProgress)
-        {
-            craftingIndices[slotIndex] = -1;
-            craftingState = CraftingState.None; // reset state
-        }
-    }
-
-    void OnDragAndClear_NpcReviveSlot(int slotIndex)
-    {
-        UINpcRevive.singleton.itemIndex = -1;
     }
 
     // validation //////////////////////////////////////////////////////////////

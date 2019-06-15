@@ -15,9 +15,6 @@ public partial class UICharacterInfo : MonoBehaviour
     public Text blockChanceText;
     public Text speedText;
     public Text levelText;
-    public Text currentExperienceText;
-    public Text maximumExperienceText;
-    public Text skillExperienceText;
     public Text strengthText;
     public Text intelligenceText;
     public Button strengthButton;
@@ -43,9 +40,6 @@ public partial class UICharacterInfo : MonoBehaviour
                 blockChanceText.text = (player.blockChance * 100).ToString("F0") + "%";
                 speedText.text = player.speed.ToString();
                 levelText.text = player.level.ToString();
-                currentExperienceText.text = player.experience.ToString();
-                maximumExperienceText.text = player.experienceMax.ToString();
-                skillExperienceText.text = player.skillExperience.ToString();
 
                 strengthText.text = player.strength.ToString();
                 strengthButton.interactable = player.AttributesSpendable() > 0;

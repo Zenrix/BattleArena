@@ -16,7 +16,7 @@ public class TargetDamageSkill : DamageSkill
         if (caster.target != null)
         {
             destination = caster.target.collider.ClosestPoint(caster.transform.position);
-            return Utils.ClosestDistance(caster.collider, caster.target.collider) <= castRange.Get(skillLevel);
+            return Utils.ClosestDistance(caster.collider, caster.target.collider) <= castRange;
         }
         destination = caster.transform.position;
         return false;
@@ -26,8 +26,8 @@ public class TargetDamageSkill : DamageSkill
     {
         // deal damage directly with base damage + skill damage
         caster.DealDamageAt(caster.target,
-                            caster.damage + damage.Get(skillLevel),
-                            stunChance.Get(skillLevel),
-                            stunTime.Get(skillLevel));
+                            caster.damage + damage,
+                            stunChance,
+                            stunTime);
     }
 }

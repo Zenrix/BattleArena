@@ -51,7 +51,7 @@ public class TargetHealSkill : HealSkill
         if (caster.target != null)
         {
             destination = caster.target.collider.ClosestPoint(caster.transform.position);
-            return Utils.ClosestDistance(caster.collider, caster.target.collider) <= castRange.Get(skillLevel);
+            return Utils.ClosestDistance(caster.collider, caster.target.collider) <= castRange;
         }
         destination = caster.transform.position;
         return false;
@@ -63,8 +63,8 @@ public class TargetHealSkill : HealSkill
         // can't heal dead people
         if (caster.target != null && caster.target.health > 0)
         {
-            caster.target.health += healsHealth.Get(skillLevel);
-            caster.target.mana += healsMana.Get(skillLevel);
+            caster.target.health += healsHealth;
+            caster.target.mana += healsMana;
 
             // show effect on target
             SpawnEffect(caster, caster.target);

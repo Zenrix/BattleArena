@@ -52,17 +52,6 @@ public partial class UITarget : MonoBehaviour
                     slot.slider.maxValue = target.buffs[i].buffTime;
                     slot.slider.value = target.buffs[i].BuffTimeRemaining();
                 }
-
-                // trade button
-                if (target is Player)
-                {
-                    tradeButton.gameObject.SetActive(true);
-                    tradeButton.interactable = player.CanStartTradeWith(target);
-                    tradeButton.onClick.SetListener(() => {
-                        player.CmdTradeRequestSend();
-                    });
-                }
-                else tradeButton.gameObject.SetActive(false);
             }
             else panel.SetActive(false);
         }

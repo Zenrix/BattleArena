@@ -125,8 +125,6 @@ public partial class Database : MonoBehaviour
                             mana INTEGER NOT NULL,
                             strength INTEGER NOT NULL,
                             intelligence INTEGER NOT NULL,
-                            experience INTEGER NOT NULL,
-                            skillExperience INTEGER NOT NULL,
                             gold INTEGER NOT NULL,
                             coins INTEGER NOT NULL,
                             online INTEGER NOT NULL,
@@ -173,14 +171,6 @@ public partial class Database : MonoBehaviour
                             buffTimeEnd REAL NOT NULL,
                             PRIMARY KEY(character, name))");
 
-        // [PRIMARY KEY is important for performance: O(log n) instead of O(n)]
-        ExecuteNonQuery(@"CREATE TABLE IF NOT EXISTS character_quests (
-                            character TEXT NOT NULL,
-                            name TEXT NOT NULL,
-                            progress INTEGER NOT NULL,
-                            completed INTEGER NOT NULL,
-                            PRIMARY KEY(character, name))");
-
         // INTEGER PRIMARY KEY is auto incremented by sqlite if the
         // insert call passes NULL for it.
         // [PRIMARY KEY is important for performance: O(log n) instead of O(n)]
@@ -189,29 +179,6 @@ public partial class Database : MonoBehaviour
                             character TEXT NOT NULL,
                             coins INTEGER NOT NULL,
                             processed INTEGER NOT NULL)");
-
-        // [PRIMARY KEY is important for performance: O(log n) instead of O(n)]
-        // guild members are saved in a separate table because instead of in a
-        // characters.guild field because:
-        // * guilds need to be resaved independently, not just in CharacterSave
-        // * kicked members' guilds are cleared automatically because we drop
-        //   and then insert all members each time. otherwise we'd have to
-        //   update the kicked member's guild field manually each time
-        // * it's easier to remove / modify the guild feature if it's not hard-
-        //   coded into the characters table
-        ExecuteNonQuery(@"CREATE TABLE IF NOT EXISTS character_guild (
-                            character TEXT NOT NULL PRIMARY KEY,
-                            guild TEXT NOT NULL,
-                            rank INTEGER NOT NULL)");
-
-        // add index on guild to avoid full scans when loading guild members
-        ExecuteNonQuery("CREATE INDEX IF NOT EXISTS character_guild_by_guild ON character_guild (guild)");
-
-        // guild master is not in guild_info in case we need more than one later
-        // [PRIMARY KEY is important for performance: O(log n) instead of O(n)]
-        ExecuteNonQuery(@"CREATE TABLE IF NOT EXISTS guild_info (
-                            name TEXT NOT NULL PRIMARY KEY,
-                            notice TEXT NOT NULL)");
 
         // [PRIMARY KEY is important for performance: O(log n) instead of O(n)]
         // => created & lastlogin for statistics like CCU/MAU/registrations/...
@@ -530,10 +497,8 @@ public partial class Database : MonoBehaviour
                 int mana                  = Convert.ToInt32((long)mainrow[8]);
                 player.strength           = Convert.ToInt32((long)mainrow[9]);
                 player.intelligence       = Convert.ToInt32((long)mainrow[10]);
-                player.experience         = (long)mainrow[11];
-                player.skillExperience    = (long)mainrow[12];
-                player.gold               = (long)mainrow[13];
-                player.coins              = (long)mainrow[14];
+                player.gold               = (long)mainrow[11];
+                player.coins              = (long)mainrow[12];
 
                 // is the position on a navmesh?
                 // it might not be if we changed the terrain, or if the player
@@ -665,7 +630,7 @@ public partial class Database : MonoBehaviour
         // only use a transaction if not called within SaveMany transaction
         if (useTransaction) ExecuteNonQuery("BEGIN");
 
-        ExecuteNonQuery("INSERT OR REPLACE INTO characters VALUES (@name, @account, @class, @x, @y, @z, @level, @health, @mana, @strength, @intelligence, @experience, @skillExperience, @gold, @coins, @online, @lastsaved, 0)",
+        ExecuteNonQuery("INSERT OR REPLACE INTO characters VALUES (@name, @account, @class, @x, @y, @z, @level, @health, @mana, @strength, @intelligence, @gold, @coins, @online, @lastsaved, 0)",
                         new SqliteParameter("@name", player.name),
                         new SqliteParameter("@account", player.account),
                         new SqliteParameter("@class", player.className),
@@ -677,8 +642,6 @@ public partial class Database : MonoBehaviour
                         new SqliteParameter("@mana", player.mana),
                         new SqliteParameter("@strength", player.strength),
                         new SqliteParameter("@intelligence", player.intelligence),
-                        new SqliteParameter("@experience", player.experience),
-                        new SqliteParameter("@skillExperience", player.skillExperience),
                         new SqliteParameter("@gold", player.gold),
                         new SqliteParameter("@coins", player.coins),
                         new SqliteParameter("@online", online ? 1 : 0),

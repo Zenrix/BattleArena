@@ -60,24 +60,12 @@ public partial class UISkills : MonoBehaviour
                     // description
                     slot.descriptionText.text = skill.ToolTip(showRequirements: skill.level == 0);
 
-                    // learn / upgrade
-                    if (skill.level < skill.maxLevel && player.CanUpgradeSkill(skill))
-                    {
-                        slot.upgradeButton.gameObject.SetActive(true);
-                        slot.upgradeButton.GetComponentInChildren<Text>().text = skill.level == 0 ? "Learn" : "Upgrade";
-                        slot.upgradeButton.onClick.SetListener(() => { player.CmdUpgradeSkill(icopy); });
-                    }
-                    else slot.upgradeButton.gameObject.SetActive(false);
-
                     // cooldown overlay
                     float cooldown = skill.CooldownRemaining();
                     slot.cooldownOverlay.SetActive(skill.level > 0 && cooldown > 0);
                     slot.cooldownText.text = cooldown.ToString("F0");
                     slot.cooldownCircle.fillAmount = skill.cooldown > 0 ? cooldown / skill.cooldown : 0;
                 }
-
-                // skill experience
-                skillExperienceText.text = player.skillExperience.ToString();
             }
         }
         else panel.SetActive(false);

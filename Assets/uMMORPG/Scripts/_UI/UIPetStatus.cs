@@ -24,9 +24,6 @@ public class UIPetStatus : MonoBehaviour
             healthSlider.value = pet.HealthPercent();
             healthSlider.GetComponent<UIShowToolTip>().text = "Health: " + pet.health + " / " + pet.healthMax;
 
-            experienceSlider.value = pet.ExperiencePercent();
-            experienceSlider.GetComponent<UIShowToolTip>().text = "Experience: " + pet.experience + " / " + pet.experienceMax;
-
             nameText.text = pet.name;
             levelText.text = "Lv." + pet.level.ToString();
 

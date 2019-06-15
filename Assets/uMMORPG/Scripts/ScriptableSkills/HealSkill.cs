@@ -6,8 +6,8 @@ using Mirror;
 
 public abstract class HealSkill : ScriptableSkill
 {
-    public LinearInt healsHealth;
-    public LinearInt healsMana;
+    public int healsHealth;
+    public int healsMana;
     public OneTimeTargetSkillEffect effect;
 
     // helper function to spawn the skill effect on someone
@@ -27,8 +27,8 @@ public abstract class HealSkill : ScriptableSkill
     public override string ToolTip(int skillLevel, bool showRequirements = false)
     {
         StringBuilder tip = new StringBuilder(base.ToolTip(skillLevel, showRequirements));
-        tip.Replace("{HEALSHEALTH}", healsHealth.Get(skillLevel).ToString());
-        tip.Replace("{HEALSMANA}", healsMana.Get(skillLevel).ToString());
+        tip.Replace("{HEALSHEALTH}", healsHealth.ToString());
+        tip.Replace("{HEALSMANA}", healsMana.ToString());
         return tip.ToString();
     }
 }
