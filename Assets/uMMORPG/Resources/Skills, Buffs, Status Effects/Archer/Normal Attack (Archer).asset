@@ -1,0 +1,65 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b80ad15ef45647dbad4ae39c42931d9, type: 3}
+  m_Name: Normal Attack (Archer)
+  m_EditorClassIdentifier: 
+  followupDefaultAttack: 1
+  toolTip: '<b>{NAME} Lvl {LEVEL}</b>
+
+    Default Attack
+
+
+    Damage: {DAMAGE}
+
+    Cast Time: {CASTTIME}
+
+    Cooldown: {COOLDOWN}
+
+    Cast Range: {CASTRANGE}'
+  image: {fileID: 21300000, guid: 408b74f1899b9427b82d0c94826a7e90, type: 3}
+  learnDefault: 1
+  showCastBar: 0
+  cancelCastIfTargetDied: 1
+  predecessor: {fileID: 0}
+  predecessorLevel: 1
+  requiredWeaponCategory: WeaponBow
+  requiredLevel:
+    bonusPerLevel: 0
+    baseValue: 0
+  requiredSkillExperience:
+    bonusPerLevel: 0
+    baseValue: 0
+  maxLevel: 1
+  manaCosts:
+    bonusPerLevel: 0
+    baseValue: 0
+  castTime:
+    bonusPerLevel: 0
+    baseValue: 1.5
+  cooldown:
+    bonusPerLevel: 0
+    baseValue: 0
+  castRange:
+    bonusPerLevel: 0
+    baseValue: 15
+  castSound: {fileID: 0}
+  damage:
+    bonusPerLevel: 0
+    baseValue: 5
+  stunChance:
+    bonusPerLevel: 0
+    baseValue: 0
+  stunTime:
+    bonusPerLevel: 0
+    baseValue: 0
+  projectile: {fileID: 114423741089805692, guid: 0f4948efce538432191cef46aef01d26,
+    type: 3}

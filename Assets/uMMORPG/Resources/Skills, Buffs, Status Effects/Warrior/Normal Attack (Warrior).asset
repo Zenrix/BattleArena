@@ -1,0 +1,63 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 31df86bdb5207437cb20582b0b85ebcc, type: 3}
+  m_Name: Normal Attack (Warrior)
+  m_EditorClassIdentifier: 
+  followupDefaultAttack: 1
+  toolTip: '<b>{NAME} Lvl {LEVEL}</b>
+
+    Default Attack
+
+
+    Damage: {DAMAGE}
+
+    Cast Time: {CASTTIME}
+
+    Cooldown: {COOLDOWN}
+
+    Cast Range: {CASTRANGE}'
+  image: {fileID: 21300000, guid: ee8cb878fb4994c029fd13d79791e030, type: 3}
+  learnDefault: 1
+  showCastBar: 0
+  cancelCastIfTargetDied: 1
+  predecessor: {fileID: 0}
+  predecessorLevel: 1
+  requiredWeaponCategory: WeaponSword
+  requiredLevel:
+    bonusPerLevel: 0
+    baseValue: 0
+  requiredSkillExperience:
+    bonusPerLevel: 0
+    baseValue: 0
+  maxLevel: 1
+  manaCosts:
+    bonusPerLevel: 0
+    baseValue: 0
+  castTime:
+    bonusPerLevel: 0
+    baseValue: 0.96
+  cooldown:
+    bonusPerLevel: 0
+    baseValue: 0
+  castRange:
+    bonusPerLevel: 0
+    baseValue: 1.5
+  castSound: {fileID: 0}
+  damage:
+    bonusPerLevel: 0
+    baseValue: 5
+  stunChance:
+    bonusPerLevel: 0
+    baseValue: 0
+  stunTime:
+    bonusPerLevel: 0
+    baseValue: 0
