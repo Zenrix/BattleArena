@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
+using System.Collections;
 
 public partial class UIChat : MonoBehaviour
 {
@@ -26,7 +27,7 @@ public partial class UIChat : MonoBehaviour
         Player player = Player.localPlayer;
         if (player)
         {
-            panel.SetActive(true);
+            //panel.SetActive(true);
 
             // character limit
             PlayerChat chat = player.GetComponent<PlayerChat>();
@@ -35,7 +36,11 @@ public partial class UIChat : MonoBehaviour
             // activation (ignored once after deselecting, so it doesn't immediately
             // activate again)
             if (Utils.AnyKeyDown(activationKeys) && !eatActivation)
+            {
+                panel.SetActive(true);
                 messageInput.Select();
+            }
+                
             eatActivation = false;
 
             // end edit listener
@@ -46,6 +51,8 @@ public partial class UIChat : MonoBehaviour
                     messageInput.text = newinput;
                     messageInput.MoveTextEnd(false);
                     eatActivation = true;
+
+                    StartCoroutine("Fade");
                 }
 
                 // unfocus the whole chat in any case. otherwise we would scroll or
@@ -63,9 +70,36 @@ public partial class UIChat : MonoBehaviour
                 // unfocus the whole chat in any case. otherwise we would scroll or
                 // activate the chat window when doing wsad movement afterwards
                 UIUtils.DeselectCarefully();
+
+                StartCoroutine("Fade");
             });
         }
         else panel.SetActive(false);
+    }
+
+    IEnumerator Fade()
+    {
+        CanvasRenderer cr = panel.GetComponent<CanvasRenderer>();
+
+        float waitTime;
+
+        float startFadeTime = 5f;
+        for(waitTime = 10f; waitTime > startFadeTime; waitTime -= .01f)
+        {
+            Debug.Log("waiting");
+            yield return null;
+        }
+
+        float incrementTime = .01f;
+
+        float incrementAlphaFade = incrementTime/startFadeTime;
+
+        for(;waitTime > 0; waitTime -= incrementTime)
+        {
+            Debug.Log("fading from " + cr.GetAlpha().ToString() + " to " + (cr.GetAlpha() - incrementAlphaFade).ToString());
+            cr.SetAlpha(cr.GetAlpha() - incrementAlphaFade);
+            yield return null;
+        }
     }
 
     void AutoScroll()
