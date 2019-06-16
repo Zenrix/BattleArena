@@ -38,7 +38,8 @@ public partial class UIChat : MonoBehaviour
             if (Utils.AnyKeyDown(activationKeys) && !eatActivation)
             {
                 panel.SetActive(true);
-                messageInput.Select();
+                ShowMessages();
+                SelectInput();                
             }
                 
             eatActivation = false;
@@ -52,7 +53,7 @@ public partial class UIChat : MonoBehaviour
                     messageInput.MoveTextEnd(false);
                     eatActivation = true;
 
-                    StartCoroutine("Fade");
+                    MessageSent();
                 }
 
                 // unfocus the whole chat in any case. otherwise we would scroll or
@@ -71,33 +72,51 @@ public partial class UIChat : MonoBehaviour
                 // activate the chat window when doing wsad movement afterwards
                 UIUtils.DeselectCarefully();
 
-                StartCoroutine("Fade");
+                MessageSent();
             });
         }
         else panel.SetActive(false);
     }
 
+    void ShowMessages()
+    {
+        for(int i = 0; i < content.childCount; ++i)
+        {
+            content.GetChild(i).gameObject.GetComponent<CanvasRenderer>().SetAlpha(1f);
+        }
+    }
+
     IEnumerator Fade()
     {
         CanvasRenderer cr = panel.GetComponent<CanvasRenderer>();
-
-        float waitTime;
-
-        float startFadeTime = 5f;
-        for(waitTime = 10f; waitTime > startFadeTime; waitTime -= .01f)
+       
+        cr.SetAlpha(1f);
+        for (int i = 0; i < content.childCount; ++i)
         {
-            Debug.Log("waiting");
-            yield return null;
+            content.GetChild(i).gameObject.GetComponent<CanvasRenderer>().SetAlpha(1f);
         }
 
-        float incrementTime = .01f;
+        yield return new WaitForSeconds(4f);
 
+        //how much time to take to fade in seconds
+        float startFadeTime = 3f;
+
+        //the increment at which to fade, and the alpha increment rate to fade at
+        float incrementTime = .01f;
         float incrementAlphaFade = incrementTime/startFadeTime;
 
-        for(;waitTime > 0; waitTime -= incrementTime)
+        float currentAlpha = 1f;
+
+        for(float waitTime = startFadeTime; waitTime > 0; waitTime -= incrementTime)
         {
-            Debug.Log("fading from " + cr.GetAlpha().ToString() + " to " + (cr.GetAlpha() - incrementAlphaFade).ToString());
-            cr.SetAlpha(cr.GetAlpha() - incrementAlphaFade);
+            //Debug.Log("fading from " + cr.GetAlpha().ToString() + " to " + (cr.GetAlpha() - incrementAlphaFade).ToString());
+            currentAlpha -= incrementAlphaFade;
+            cr.SetAlpha(currentAlpha);
+
+            for(int i = 0; i < content.childCount; ++i)
+            {
+                content.GetChild(i).gameObject.GetComponent<CanvasRenderer>().SetAlpha(currentAlpha);
+            }
             yield return null;
         }
     }
@@ -138,12 +157,33 @@ public partial class UIChat : MonoBehaviour
             // set text to reply prefix
             messageInput.text = entry.message.replyPrefix;
 
-            // activate
-            messageInput.Select();
+            SelectInput();
 
             // move cursor to end (doesn't work in here, needs small delay)
             Invoke(nameof(MoveTextEnd), 0.1f);
         }
+    }
+
+    /// <summary>
+    /// Select the InputField for messages
+    /// </summary>
+    void SelectInput()
+    {
+        //display the InputField
+        messageInput.gameObject.SetActive(true);
+
+        // activate message selection
+        messageInput.Select();
+    }
+
+    /// <summary>
+    /// Take action after a message has been sent
+    /// </summary>
+    void MessageSent()
+    {
+        messageInput.gameObject.SetActive(false);
+        StopCoroutine("Fade");
+        StartCoroutine("Fade");
     }
 
     void MoveTextEnd()
