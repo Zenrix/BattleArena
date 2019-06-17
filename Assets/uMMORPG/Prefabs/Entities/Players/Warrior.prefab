@@ -147,41 +147,23 @@ MonoBehaviour:
   agent: {fileID: 19543452}
   proxchecker: {fileID: 11466958}
   animator: {fileID: 9557554}
-  collider: {fileID: 0}
+  collider: {fileID: 1992715461}
   audioSource: {fileID: 82252748755917382}
   _state: IDLE
   lastCombatTime: 0
   level: 1
-  _healthMax:
-    baseValue: 100
-    bonusPerLevel: 10
+  _healthMax: 100
   invincible: 0
   healthRecovery: 1
-  _healthRecoveryRate:
-    baseValue: 1
-    bonusPerLevel: 0
-  _manaMax:
-    baseValue: 100
-    bonusPerLevel: 10
+  _healthRecoveryRate: 1
+  _manaMax: 100
   manaRecovery: 1
-  _manaRecoveryRate:
-    baseValue: 1
-    bonusPerLevel: 0
-  _damage:
-    baseValue: 1
-    bonusPerLevel: 1
-  _defense:
-    baseValue: 1
-    bonusPerLevel: 1
-  _blockChance:
-    baseValue: 0
-    bonusPerLevel: 0
-  _criticalChance:
-    baseValue: 0
-    bonusPerLevel: 0
-  _speed:
-    baseValue: 5
-    bonusPerLevel: 0
+  _manaRecoveryRate: 1
+  _damage: 1
+  _defense: 1
+  _blockChance: 0
+  _criticalChance: 0
+  _speed: 5
   damagePopupPrefab: {fileID: 179236, guid: e81ebbaa55e254e31b9909cef04e3855, type: 3}
   skillTemplates:
   - {fileID: 11400000, guid: 605fccd420d8e495891132829d3ac497, type: 2}
@@ -211,12 +193,6 @@ MonoBehaviour:
   className: 
   strength: 0
   intelligence: 0
-  maxLevel: 4
-  _experience: 0
-  _experienceMax:
-    multiplier: 100
-    baseValue: 10
-  skillExperience: 0
   indicatorPrefab: {fileID: 120922, guid: 95fc72c38103b4c928f9e12db60c9f8e, type: 3}
   indicator: {fileID: 0}
   inventorySize: 30
@@ -298,19 +274,12 @@ MonoBehaviour:
     hotKey: 57
   - reference: 
     hotKey: 48
-  activeQuestLimit: 10
   interactionRange: 4
   targetNearestKey: 9
   localPlayerClickThrough: 1
   cancelActionKey: 27
   offenderBuff: {fileID: 11400000, guid: b8d2834a38f4c411595b27152678ce72, type: 2}
   murdererBuff: {fileID: 11400000, guid: e806fbf7b375c497790f2f50e57c38d0, type: 2}
-  tradeRequestFrom: 
-  tradeStatus: 0
-  tradeOfferGold: 0
-  craftingIndices: ffffffffffffffffffffffffffffffffffffffffffffffff
-  craftingState: 0
-  craftingTimeEnd: 0
   itemMallCategories:
   - category: Potions
     items:
@@ -329,10 +298,6 @@ MonoBehaviour:
     - {fileID: 11400000, guid: acadbc0e96f8b49299aa1d1a5453f6f0, type: 2}
   coins: 0
   couponWaitSeconds: 3
-  guildInviteFrom: 
-  guildInviteWaitSeconds: 3
-  partyInviteFrom: 
-  partyInviteWaitSeconds: 3
   meshToOffsetWhenMounted: {fileID: 0}
   seatOffsetY: -1.1
   attackToMoveRangeRatio: 0.8

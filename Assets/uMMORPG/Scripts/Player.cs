@@ -62,12 +62,8 @@ public partial class Player : Entity
     [Header("Text Meshes")]
     public TextMeshPro nameOverlay;
     public Color nameOverlayDefaultColor = Color.white;
-    public Color nameOverlayOffenderColor = Color.magenta;
-    public Color nameOverlayMurdererColor = Color.red;
-    public Color nameOverlayPartyColor = new Color(0.341f, 0.965f, 0.702f);
-    public TextMeshPro guildOverlay;
-    public string guildOverlayPrefix = "[";
-    public string guildOverlaySuffix = "]";
+    public Color nameOverlayFriendlyTeam = Color.blue;
+    public Color nameOverlayEnemyTeam = Color.red;
 
     [Header("Icons")]
     public Sprite classIcon; // for character selection
@@ -649,37 +645,14 @@ public partial class Player : Entity
         return "MOVING"; // nothing interesting happened
     }
 
-    void UseNextTargetIfAny()
-    {
-        // use next target if the user tried to target another while casting
-        // (target is locked while casting so skill isn't applied to an invalid
-        //  target accidentally)
-        if (nextTarget != null)
-        {
-            target = nextTarget;
-            nextTarget = null;
-        }
-    }
-
     [Server]
     string UpdateServer_CASTING()
     {
-        // keep looking at the target for server & clients (only Y rotation)
-        if (target) LookAtY(target.transform.position);
-
         // events sorted by priority (e.g. target doesn't matter if we died)
-        //
-        // IMPORTANT: nextTarget might have been set while casting, so make sure
-        // to handle it in any case here. it should definitely be null again
-        // after casting was finished.
-        // => this way we can reliably display nextTarget on the client if it's
-        //    != null, so that UITarget always shows nextTarget>target
-        //    (this just feels better)
         if (EventDied())
         {
             // we died.
             OnDeath();
-            UseNextTargetIfAny(); // if user selected a new target while casting
             return "DEAD";
         }
         if (EventStunned())
@@ -704,13 +677,19 @@ public partial class Player : Entity
             // we do NOT reset movement either. allow sliding to final position.
             // (NavMeshAgentRubberbanding doesn't accept new ones while CASTING)
             //rubberbanding.ResetMovement(); <- DO NOT DO THIS
+
+            // Not sure what's going on here, but since we likely have no targeted
+            // skills, the previous comment is moot. Will be cancelling cast for now.
+            // Keeping previous comment temporarily.
+
+            currentSkill = -1;
+
             return "CASTING";
         }
         if (EventCancelAction())
         {
             // cancel casting
             currentSkill = -1;
-            UseNextTargetIfAny(); // if user selected a new target while casting
             return "IDLE";
         }
         if (EventTargetDisappeared())
@@ -719,7 +698,6 @@ public partial class Player : Entity
             if (skills[currentSkill].cancelCastIfTargetDied)
             {
                 currentSkill = -1;
-                UseNextTargetIfAny(); // if user selected a new target while casting
                 return "IDLE";
             }
         }
@@ -729,7 +707,6 @@ public partial class Player : Entity
             if (skills[currentSkill].cancelCastIfTargetDied)
             {
                 currentSkill = -1;
-                UseNextTargetIfAny(); // if user selected a new target while casting
                 return "IDLE";
             }
         }
@@ -752,9 +729,6 @@ public partial class Player : Entity
             bool validTarget = target != null && target.health > 0;
             if (currentSkill != -1 && skills[currentSkill].cancelCastIfTargetDied && !validTarget)
                 currentSkill = -1;
-
-            // use next target if the user tried to target another while casting
-            UseNextTargetIfAny();
 
             // go back to IDLE
             return "IDLE";
@@ -935,15 +909,7 @@ public partial class Player : Entity
             // find local player (null while in character selection)
             if (localPlayer != null)
             {
-                // note: murderer has higher priority (a player can be a murderer and an
-                // offender at the same time)
-                if (IsMurderer())
-                    nameOverlay.color = nameOverlayMurdererColor;
-                else if (IsOffender())
-                    nameOverlay.color = nameOverlayOffenderColor;
-                // otherwise default
-                else
-                    nameOverlay.color = nameOverlayDefaultColor;
+                // TODO: Set player team color
             }
         }
     }

@@ -541,28 +541,9 @@ public partial class Pet : Summonable
     protected override void UpdateOverlays()
     {
         base.UpdateOverlays();
-
-        if (ownerNameOverlay != null)
-        {
-            if (owner != null)
-            {
-                ownerNameOverlay.text = owner.name;
-                // find local player (null while in character selection)
-                if (Player.localPlayer != null)
-                {
-                    // note: murderer has higher priority (a player can be a murderer and an
-                    // offender at the same time)
-                    if (owner.IsMurderer())
-                        ownerNameOverlay.color = owner.nameOverlayMurdererColor;
-                    else if (owner.IsOffender())
-                        ownerNameOverlay.color = owner.nameOverlayOffenderColor;
-                    // otherwise default
-                    else
-                        ownerNameOverlay.color = owner.nameOverlayDefaultColor;
-                }
-            }
-            else ownerNameOverlay.text = "?";
-        }
+        // Not sure how much pet code we're keeping in game. Will set pet team
+        // color here.
+        
     }
 
     // combat //////////////////////////////////////////////////////////////////
