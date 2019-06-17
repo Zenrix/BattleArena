@@ -886,8 +886,6 @@ public partial class Player : Entity
                 if (Input.GetKeyDown(cancelActionKey)) CmdCancelAction();
             }
         }
-        else if (state == "TRADING") {}
-        else if (state == "CRAFTING") {}
         else if (state == "DEAD") {}
         else Debug.LogError("invalid state:" + state);
 
