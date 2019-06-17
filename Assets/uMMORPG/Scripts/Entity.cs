@@ -70,7 +70,7 @@ public abstract partial class Entity : NetworkBehaviour
     [SyncVar] public int level = 1;
 
     [Header("Health")]
-    [SerializeField] protected LinearInt _healthMax = new LinearInt{baseValue=100};
+    [SerializeField] protected int _healthMax = 100;
     public virtual int healthMax
     {
         get
@@ -78,9 +78,9 @@ public abstract partial class Entity : NetworkBehaviour
             // base + passives + buffs
             int passiveBonus = (from skill in skills
                                 where skill.level > 0 && skill.data is PassiveSkill
-                                select ((PassiveSkill)skill.data).bonusHealthMax.Get(skill.level)).Sum();
+                                select ((PassiveSkill)skill.data).bonusHealthMax).Sum();
             int buffBonus = buffs.Sum(buff => buff.bonusHealthMax);
-            return _healthMax.Get(level) + passiveBonus + buffBonus;
+            return _healthMax + passiveBonus + buffBonus;
         }
     }
     public bool invincible = false; // GMs, Npcs, ...
@@ -92,7 +92,7 @@ public abstract partial class Entity : NetworkBehaviour
     }
 
     public bool healthRecovery = true; // can be disabled in combat etc.
-    [SerializeField] protected LinearInt _healthRecoveryRate = new LinearInt{baseValue=1};
+    [SerializeField] protected int _healthRecoveryRate = 1;
     public virtual int healthRecoveryRate
     {
         get
@@ -100,14 +100,14 @@ public abstract partial class Entity : NetworkBehaviour
             // base + passives + buffs
             float passivePercent = (from skill in skills
                                     where skill.level > 0 && skill.data is PassiveSkill
-                                    select ((PassiveSkill)skill.data).bonusHealthPercentPerSecond.Get(skill.level)).Sum();
+                                    select ((PassiveSkill)skill.data).bonusHealthPercentPerSecond).Sum();
             float buffPercent = buffs.Sum(buff => buff.bonusHealthPercentPerSecond);
-            return _healthRecoveryRate.Get(level) + Convert.ToInt32(passivePercent * healthMax) + Convert.ToInt32(buffPercent * healthMax);
+            return _healthRecoveryRate + Convert.ToInt32(passivePercent * healthMax) + Convert.ToInt32(buffPercent * healthMax);
         }
     }
 
     [Header("Mana")]
-    [SerializeField] protected LinearInt _manaMax = new LinearInt{baseValue=100};
+    [SerializeField] protected int _manaMax = 100;
     public virtual int manaMax
     {
         get
@@ -115,9 +115,9 @@ public abstract partial class Entity : NetworkBehaviour
             // base + passives + buffs
             int passiveBonus = (from skill in skills
                                   where skill.level > 0 && skill.data is PassiveSkill
-                                  select ((PassiveSkill)skill.data).bonusManaMax.Get(skill.level)).Sum();
+                                  select ((PassiveSkill)skill.data).bonusManaMax).Sum();
             int buffBonus = buffs.Sum(buff => buff.bonusManaMax);
-            return _manaMax.Get(level) + passiveBonus + buffBonus;
+            return _manaMax + passiveBonus + buffBonus;
         }
     }
     [SyncVar] int _mana = 1;
@@ -128,7 +128,7 @@ public abstract partial class Entity : NetworkBehaviour
     }
 
     public bool manaRecovery = true; // can be disabled in combat etc.
-    [SerializeField] protected LinearInt _manaRecoveryRate = new LinearInt{baseValue=1};
+    [SerializeField] protected int _manaRecoveryRate = 1;
     public int manaRecoveryRate
     {
         get
@@ -136,14 +136,14 @@ public abstract partial class Entity : NetworkBehaviour
             // base + passives + buffs
             float passivePercent = (from skill in skills
                                     where skill.level > 0 && skill.data is PassiveSkill
-                                    select ((PassiveSkill)skill.data).bonusManaPercentPerSecond.Get(skill.level)).Sum();
+                                    select ((PassiveSkill)skill.data).bonusManaPercentPerSecond).Sum();
             float buffPercent = buffs.Sum(buff => buff.bonusManaPercentPerSecond);
-            return _manaRecoveryRate.Get(level) + Convert.ToInt32(passivePercent * manaMax) + Convert.ToInt32(buffPercent * manaMax);
+            return _manaRecoveryRate + Convert.ToInt32(passivePercent * manaMax) + Convert.ToInt32(buffPercent * manaMax);
         }
     }
 
     [Header("Damage")]
-    [SerializeField] protected LinearInt _damage = new LinearInt{baseValue=1};
+    [SerializeField] protected int _damage = 1;
     public virtual int damage
     {
         get
@@ -151,14 +151,14 @@ public abstract partial class Entity : NetworkBehaviour
             // base + passives + buffs
             int passiveBonus = (from skill in skills
                                 where skill.level > 0 && skill.data is PassiveSkill
-                                select ((PassiveSkill)skill.data).bonusDamage.Get(skill.level)).Sum();
+                                select ((PassiveSkill)skill.data).bonusDamage).Sum();
             int buffBonus = buffs.Sum(buff => buff.bonusDamage);
-            return _damage.Get(level) + passiveBonus + buffBonus;
+            return _damage + passiveBonus + buffBonus;
         }
     }
 
     [Header("Defense")]
-    [SerializeField] protected LinearInt _defense = new LinearInt{baseValue=1};
+    [SerializeField] protected int _defense = 1;
     public virtual int defense
     {
         get
@@ -166,14 +166,14 @@ public abstract partial class Entity : NetworkBehaviour
             // base + passives + buffs
             int passiveBonus = (from skill in skills
                                 where skill.level > 0 && skill.data is PassiveSkill
-                                select ((PassiveSkill)skill.data).bonusDefense.Get(skill.level)).Sum();
+                                select ((PassiveSkill)skill.data).bonusDefense).Sum();
             int buffBonus = buffs.Sum(buff => buff.bonusDefense);
-            return _defense.Get(level) + passiveBonus + buffBonus;
+            return _defense + passiveBonus + buffBonus;
         }
     }
 
     [Header("Block")]
-    [SerializeField] protected LinearFloat _blockChance;
+    [SerializeField] protected float _blockChance;
     public virtual float blockChance
     {
         get
@@ -181,14 +181,14 @@ public abstract partial class Entity : NetworkBehaviour
             // base + passives + buffs
             float passiveBonus = (from skill in skills
                                   where skill.level > 0 && skill.data is PassiveSkill
-                                  select ((PassiveSkill)skill.data).bonusBlockChance.Get(skill.level)).Sum();
+                                  select ((PassiveSkill)skill.data).bonusBlockChance).Sum();
             float buffBonus = buffs.Sum(buff => buff.bonusBlockChance);
-            return _blockChance.Get(level) + passiveBonus + buffBonus;
+            return _blockChance + passiveBonus + buffBonus;
         }
     }
 
     [Header("Critical")]
-    [SerializeField] protected LinearFloat _criticalChance;
+    [SerializeField] protected float _criticalChance;
     public virtual float criticalChance
     {
         get
@@ -196,14 +196,14 @@ public abstract partial class Entity : NetworkBehaviour
             // base + passives + buffs
             float passiveBonus = (from skill in skills
                                   where skill.level > 0 && skill.data is PassiveSkill
-                                  select ((PassiveSkill)skill.data).bonusCriticalChance.Get(skill.level)).Sum();
+                                  select ((PassiveSkill)skill.data).bonusCriticalChance).Sum();
             float buffBonus = buffs.Sum(buff => buff.bonusCriticalChance);
-            return _criticalChance.Get(level) + passiveBonus + buffBonus;
+            return _criticalChance + passiveBonus + buffBonus;
         }
     }
 
     [Header("Speed")]
-    [SerializeField] protected LinearFloat _speed = new LinearFloat{baseValue=5};
+    [SerializeField] protected float _speed = 5;
     public virtual float speed
     {
         get
@@ -211,9 +211,9 @@ public abstract partial class Entity : NetworkBehaviour
             // base + passives + buffs
             float passiveBonus = (from skill in skills
                                 where skill.level > 0 && skill.data is PassiveSkill
-                                select ((PassiveSkill)skill.data).bonusSpeed.Get(skill.level)).Sum();
+                                select ((PassiveSkill)skill.data).bonusSpeed).Sum();
             float buffBonus = buffs.Sum(buff => buff.bonusSpeed);
-            return _speed.Get(level) + passiveBonus + buffBonus;
+            return _speed + passiveBonus + buffBonus;
         }
     }
 

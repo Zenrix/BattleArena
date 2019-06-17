@@ -125,8 +125,6 @@ public partial class Database : MonoBehaviour
                             mana INTEGER NOT NULL,
                             strength INTEGER NOT NULL,
                             intelligence INTEGER NOT NULL,
-                            experience INTEGER NOT NULL,
-                            skillExperience INTEGER NOT NULL,
                             gold INTEGER NOT NULL,
                             coins INTEGER NOT NULL,
                             online INTEGER NOT NULL,
@@ -173,14 +171,6 @@ public partial class Database : MonoBehaviour
                             buffTimeEnd REAL NOT NULL,
                             PRIMARY KEY(character, name))");
 
-        // [PRIMARY KEY is important for performance: O(log n) instead of O(n)]
-        ExecuteNonQuery(@"CREATE TABLE IF NOT EXISTS character_quests (
-                            character TEXT NOT NULL,
-                            name TEXT NOT NULL,
-                            progress INTEGER NOT NULL,
-                            completed INTEGER NOT NULL,
-                            PRIMARY KEY(character, name))");
-
         // INTEGER PRIMARY KEY is auto incremented by sqlite if the
         // insert call passes NULL for it.
         // [PRIMARY KEY is important for performance: O(log n) instead of O(n)]
@@ -189,29 +179,6 @@ public partial class Database : MonoBehaviour
                             character TEXT NOT NULL,
                             coins INTEGER NOT NULL,
                             processed INTEGER NOT NULL)");
-
-        // [PRIMARY KEY is important for performance: O(log n) instead of O(n)]
-        // guild members are saved in a separate table because instead of in a
-        // characters.guild field because:
-        // * guilds need to be resaved independently, not just in CharacterSave
-        // * kicked members' guilds are cleared automatically because we drop
-        //   and then insert all members each time. otherwise we'd have to
-        //   update the kicked member's guild field manually each time
-        // * it's easier to remove / modify the guild feature if it's not hard-
-        //   coded into the characters table
-        ExecuteNonQuery(@"CREATE TABLE IF NOT EXISTS character_guild (
-                            character TEXT NOT NULL PRIMARY KEY,
-                            guild TEXT NOT NULL,
-                            rank INTEGER NOT NULL)");
-
-        // add index on guild to avoid full scans when loading guild members
-        ExecuteNonQuery("CREATE INDEX IF NOT EXISTS character_guild_by_guild ON character_guild (guild)");
-
-        // guild master is not in guild_info in case we need more than one later
-        // [PRIMARY KEY is important for performance: O(log n) instead of O(n)]
-        ExecuteNonQuery(@"CREATE TABLE IF NOT EXISTS guild_info (
-                            name TEXT NOT NULL PRIMARY KEY,
-                            notice TEXT NOT NULL)");
 
         // [PRIMARY KEY is important for performance: O(log n) instead of O(n)]
         // => created & lastlogin for statistics like CCU/MAU/registrations/...
@@ -503,48 +470,6 @@ public partial class Database : MonoBehaviour
         }
     }
 
-    void LoadQuests(Player player)
-    {
-        // load quests
-        List< List<object> > table = ExecuteReader("SELECT name, progress, completed FROM character_quests WHERE character=@character", new SqliteParameter("@character", player.name));
-        foreach (List<object> row in table)
-        {
-            string questName = (string)row[0];
-            ScriptableQuest questData;
-            if (ScriptableQuest.dict.TryGetValue(questName.GetStableHashCode(), out questData))
-            {
-                Quest quest = new Quest(questData);
-                quest.progress = Convert.ToInt32((long)row[1]);
-                quest.completed = ((long)row[2]) != 0; // sqlite has no bool
-                player.quests.Add(quest);
-            }
-            else Debug.LogWarning("LoadQuests: skipped quest " + questData.name + " for " + player.name + " because it doesn't exist anymore. If it wasn't removed intentionally then make sure it's in the Resources folder.");
-        }
-    }
-
-    // only load guild when their first player logs in
-    // => using NetworkManager.Awake to load all guilds.Where would work,
-    //    but we would require lots of memory and it might take a long time.
-    // => hooking into player loading to load guilds is a really smart solution,
-    //    because we don't ever have to load guilds that aren't needed
-    void LoadGuildOnDemand(Player player)
-    {
-        string guildName = (string)ExecuteScalar("SELECT guild FROM character_guild WHERE character=@character", new SqliteParameter("@character", player.name));
-        if (guildName != null)
-        {
-            // load guild on demand when the first player of that guild logs in
-            // (= if it's not in GuildSystem.guilds yet)
-            if (!GuildSystem.guilds.ContainsKey(guildName))
-            {
-                Guild guild = LoadGuild(guildName);
-                GuildSystem.guilds[guild.name] = guild;
-                player.guild = guild;
-            }
-            // assign from already loaded guild
-            else player.guild = GuildSystem.guilds[guildName];
-        }
-    }
-
     public GameObject CharacterLoad(string characterName, List<Player> prefabs, bool isPreview)
     {
         List< List<object> > table = ExecuteReader("SELECT * FROM characters WHERE name=@name AND deleted=0", new SqliteParameter("@name", characterName));
@@ -572,10 +497,8 @@ public partial class Database : MonoBehaviour
                 int mana                  = Convert.ToInt32((long)mainrow[8]);
                 player.strength           = Convert.ToInt32((long)mainrow[9]);
                 player.intelligence       = Convert.ToInt32((long)mainrow[10]);
-                player.experience         = (long)mainrow[11];
-                player.skillExperience    = (long)mainrow[12];
-                player.gold               = (long)mainrow[13];
-                player.coins              = (long)mainrow[14];
+                player.gold               = (long)mainrow[11];
+                player.coins              = (long)mainrow[12];
 
                 // is the position on a navmesh?
                 // it might not be if we changed the terrain, or if the player
@@ -601,8 +524,6 @@ public partial class Database : MonoBehaviour
                 LoadEquipment(player);
                 LoadSkills(player);
                 LoadBuffs(player);
-                LoadQuests(player);
-                LoadGuildOnDemand(player);
 
                 // assign health / mana after max values were fully loaded
                 // (they depend on equipment, buffs, etc.)
@@ -703,25 +624,13 @@ public partial class Database : MonoBehaviour
                             new SqliteParameter("@buffTimeEnd", buff.BuffTimeRemaining()));
     }
 
-    void SaveQuests(Player player)
-    {
-        // quests: remove old entries first, then add all new ones
-        ExecuteNonQuery("DELETE FROM character_quests WHERE character=@character", new SqliteParameter("@character", player.name));
-        foreach (Quest quest in player.quests)
-            ExecuteNonQuery("INSERT INTO character_quests VALUES (@character, @name, @progress, @completed)",
-                            new SqliteParameter("@character", player.name),
-                            new SqliteParameter("@name", quest.name),
-                            new SqliteParameter("@progress", quest.progress),
-                            new SqliteParameter("@completed", Convert.ToInt32(quest.completed)));
-    }
-
     // adds or overwrites character data in the database
     public void CharacterSave(Player player, bool online, bool useTransaction = true)
     {
         // only use a transaction if not called within SaveMany transaction
         if (useTransaction) ExecuteNonQuery("BEGIN");
 
-        ExecuteNonQuery("INSERT OR REPLACE INTO characters VALUES (@name, @account, @class, @x, @y, @z, @level, @health, @mana, @strength, @intelligence, @experience, @skillExperience, @gold, @coins, @online, @lastsaved, 0)",
+        ExecuteNonQuery("INSERT OR REPLACE INTO characters VALUES (@name, @account, @class, @x, @y, @z, @level, @health, @mana, @strength, @intelligence, @gold, @coins, @online, @lastsaved, 0)",
                         new SqliteParameter("@name", player.name),
                         new SqliteParameter("@account", player.account),
                         new SqliteParameter("@class", player.className),
@@ -733,8 +642,6 @@ public partial class Database : MonoBehaviour
                         new SqliteParameter("@mana", player.mana),
                         new SqliteParameter("@strength", player.strength),
                         new SqliteParameter("@intelligence", player.intelligence),
-                        new SqliteParameter("@experience", player.experience),
-                        new SqliteParameter("@skillExperience", player.skillExperience),
                         new SqliteParameter("@gold", player.gold),
                         new SqliteParameter("@coins", player.coins),
                         new SqliteParameter("@online", online ? 1 : 0),
@@ -744,8 +651,6 @@ public partial class Database : MonoBehaviour
         SaveEquipment(player);
         SaveSkills(player);
         SaveBuffs(player);
-        SaveQuests(player);
-        if (player.InGuild()) SaveGuild(player.guild, false); // TODO only if needs saving? but would be complicated
 
         // addon system hooks
         Utils.InvokeMany(typeof(Database), this, "CharacterSave_", player);
@@ -759,82 +664,6 @@ public partial class Database : MonoBehaviour
         ExecuteNonQuery("BEGIN"); // transaction for performance
         foreach (Player player in players)
             CharacterSave(player, online, false);
-        ExecuteNonQuery("END");
-    }
-
-    // guilds //////////////////////////////////////////////////////////////////
-    public bool GuildExists(string guild)
-    {
-        return ((long)ExecuteScalar("SELECT Count(*) FROM guild_info WHERE name=@name", new SqliteParameter("@name", guild))) == 1;
-    }
-
-    Guild LoadGuild(string guildName)
-    {
-        Guild guild = new Guild();
-
-        // set name
-        guild.name = guildName;
-
-        // load guild info
-        List< List<object> > table = ExecuteReader("SELECT notice FROM guild_info WHERE name=@guild", new SqliteParameter("@guild", guildName));
-        if (table.Count == 1) {
-            List<object> row = table[0];
-            guild.notice = (string)row[0];
-        }
-
-        // load members list
-        List<GuildMember> members = new List<GuildMember>();
-        table = ExecuteReader("SELECT character, rank FROM character_guild WHERE guild=@guild", new SqliteParameter("@guild", guildName));
-        foreach (List<object> row in table) {
-            GuildMember member = new GuildMember();
-            member.name = (string)row[0];
-            member.rank = (GuildRank)Convert.ToInt32((long)row[1]);
-
-            // is this player online right now? then use runtime data
-            if (Player.onlinePlayers.TryGetValue(member.name, out Player player))
-            {
-                member.online = true;
-                member.level = player.level;
-            }
-            else
-            {
-                member.online = false;
-                object scalar = ExecuteScalar("SELECT level FROM characters WHERE name=@character", new SqliteParameter("@character", member.name));
-                member.level = scalar != null ? Convert.ToInt32((long)scalar) : 1;
-            }
-            members.Add(member);
-        }
-        guild.members = members.ToArray();
-        return guild;
-    }
-
-    public void SaveGuild(Guild guild, bool useTransaction = true)
-    {
-        if (useTransaction) ExecuteNonQuery("BEGIN"); // transaction for performance
-
-        // guild info
-        ExecuteNonQuery("INSERT OR REPLACE INTO guild_info VALUES (@guild, @notice)",
-                        new SqliteParameter("@guild", guild.name),
-                        new SqliteParameter("@notice", guild.notice));
-
-        // members list
-        ExecuteNonQuery("DELETE FROM character_guild WHERE guild=@guild", new SqliteParameter("@guild", guild.name));
-        foreach (GuildMember member in guild.members)
-        {
-            ExecuteNonQuery("INSERT INTO character_guild VALUES (@character, @guild, @rank)",
-                            new SqliteParameter("@character", member.name),
-                            new SqliteParameter("@guild", guild.name),
-                            new SqliteParameter("@rank", member.rank));
-        }
-
-        if (useTransaction) ExecuteNonQuery("END");
-    }
-
-    public void RemoveGuild(string guild)
-    {
-        ExecuteNonQuery("BEGIN"); // transaction for performance
-        ExecuteNonQuery("DELETE FROM guild_info WHERE name=@name", new SqliteParameter("@name", guild));
-        ExecuteNonQuery("DELETE FROM character_guild WHERE guild=@guild", new SqliteParameter("@guild", guild));
         ExecuteNonQuery("END");
     }
 

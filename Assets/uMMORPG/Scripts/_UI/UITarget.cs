@@ -52,45 +52,6 @@ public partial class UITarget : MonoBehaviour
                     slot.slider.maxValue = target.buffs[i].buffTime;
                     slot.slider.value = target.buffs[i].BuffTimeRemaining();
                 }
-
-                // trade button
-                if (target is Player)
-                {
-                    tradeButton.gameObject.SetActive(true);
-                    tradeButton.interactable = player.CanStartTradeWith(target);
-                    tradeButton.onClick.SetListener(() => {
-                        player.CmdTradeRequestSend();
-                    });
-                }
-                else tradeButton.gameObject.SetActive(false);
-
-                // guild invite button
-                if (target is Player && player.InGuild())
-                {
-                    guildInviteButton.gameObject.SetActive(true);
-                    guildInviteButton.interactable = !((Player)target).InGuild() &&
-                                                     player.guild.CanInvite(player.name, target.name) &&
-                                                     NetworkTime.time >= player.nextRiskyActionTime &&
-                                                     distance <= player.interactionRange;
-                    guildInviteButton.onClick.SetListener(() => {
-                        player.CmdGuildInviteTarget();
-                    });
-                }
-                else guildInviteButton.gameObject.SetActive(false);
-
-                // party invite button
-                if (target is Player)
-                {
-                    partyInviteButton.gameObject.SetActive(true);
-                    partyInviteButton.interactable = (!player.InParty() || !player.party.IsFull()) &&
-                                                     !((Player)target).InParty() &&
-                                                     NetworkTime.time >= player.nextRiskyActionTime &&
-                                                     distance <= player.interactionRange;
-                    partyInviteButton.onClick.SetListener(() => {
-                        player.CmdPartyInvite(target.name);
-                    });
-                }
-                else partyInviteButton.gameObject.SetActive(false);
             }
             else panel.SetActive(false);
         }

@@ -7,7 +7,6 @@ public class PotionItem : UsableItem
     [Header("Potion")]
     public int usageHealth;
     public int usageMana;
-    public int usageExperience;
     public int usagePetHealth; // to heal pet
 
     // usage
@@ -19,7 +18,6 @@ public class PotionItem : UsableItem
         // increase health/mana/etc.
         player.health += usageHealth;
         player.mana += usageMana;
-        player.experience += usageExperience;
         if (player.activePet != null) player.activePet.health += usagePetHealth;
 
         // decrease amount
@@ -34,7 +32,6 @@ public class PotionItem : UsableItem
         StringBuilder tip = new StringBuilder(base.ToolTip());
         tip.Replace("{USAGEHEALTH}", usageHealth.ToString());
         tip.Replace("{USAGEMANA}", usageMana.ToString());
-        tip.Replace("{USAGEEXPERIENCE}", usageExperience.ToString());
         tip.Replace("{USAGEPETHEALTH}", usagePetHealth.ToString());
         return tip.ToString();
     }

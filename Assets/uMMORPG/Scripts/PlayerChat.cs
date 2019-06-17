@@ -123,26 +123,6 @@ public partial class PlayerChat : NetworkBehaviour
                 lastcommand = "";
                 CmdMsgLocal(text);
             }
-            else if (text.StartsWith(party.command))
-            {
-                // party
-                string msg = ParseGeneral(party.command, text);
-                if (!string.IsNullOrWhiteSpace(msg))
-                {
-                    lastcommand = party.command + " ";
-                    CmdMsgParty(msg);
-                }
-            }
-            else if (text.StartsWith(guild.command))
-            {
-                // guild
-                string msg = ParseGeneral(guild.command, text);
-                if (!string.IsNullOrWhiteSpace(msg))
-                {
-                    lastcommand = guild.command + " ";
-                    CmdMsgGuild(msg);
-                }
-            }
 
             // addon system hooks
             Utils.InvokeMany(typeof(PlayerChat), this, "OnSubmit_", text);
@@ -190,46 +170,6 @@ public partial class PlayerChat : NetworkBehaviour
 
         // it's local chat, so let's send it to all observers via ClientRpc
         RpcMsgLocal(name, message);
-    }
-
-    [Command]
-    void CmdMsgParty(string message)
-    {
-        if (message.Length > maxLength) return;
-
-        // send message to all online party members
-        if (player.InParty())
-        {
-            foreach (string member in player.party.members)
-            {
-                Player onlinePlayer;
-                if (Player.onlinePlayers.TryGetValue(member, out onlinePlayer))
-                {
-                    // call TargetRpc on that GameObject for that connection
-                    onlinePlayer.chat.TargetMsgParty(name, message);
-                }
-            }
-        }
-    }
-
-    [Command]
-    void CmdMsgGuild(string message)
-    {
-        if (message.Length > maxLength) return;
-
-        // send message to all online guild members
-        if (player.InGuild())
-        {
-            foreach (GuildMember member in player.guild.members)
-            {
-                Player onlinePlayer;
-                if (Player.onlinePlayers.TryGetValue(member.name, out onlinePlayer))
-                {
-                    // call TargetRpc on that GameObject for that connection
-                    onlinePlayer.chat.TargetMsgGuild(name, message);
-                }
-            }
-        }
     }
 
     [Command]

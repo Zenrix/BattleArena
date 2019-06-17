@@ -22,7 +22,7 @@ public partial struct Buff
     {
         hash = data.name.GetStableHashCode();
         this.level = level;
-        buffTimeEnd = NetworkTime.time + data.buffTime.Get(level); // start buff immediately
+        buffTimeEnd = NetworkTime.time + data.buffTime; // start buff immediately
     }
 
     // wrappers for easier access
@@ -41,16 +41,16 @@ public partial struct Buff
     }
     public string name => data.name;
     public Sprite image => data.image;
-    public float buffTime => data.buffTime.Get(level);
-    public int bonusHealthMax => data.bonusHealthMax.Get(level);
-    public int bonusManaMax => data.bonusManaMax.Get(level);
-    public int bonusDamage => data.bonusDamage.Get(level);
-    public int bonusDefense => data.bonusDefense.Get(level);
-    public float bonusBlockChance => data.bonusBlockChance.Get(level);
-    public float bonusCriticalChance => data.bonusCriticalChance.Get(level);
-    public float bonusHealthPercentPerSecond => data.bonusHealthPercentPerSecond.Get(level);
-    public float bonusManaPercentPerSecond => data.bonusManaPercentPerSecond.Get(level);
-    public float bonusSpeed => data.bonusSpeed.Get(level);
+    public float buffTime => data.buffTime;
+    public int bonusHealthMax => data.bonusHealthMax;
+    public int bonusManaMax => data.bonusManaMax;
+    public int bonusDamage => data.bonusDamage;
+    public int bonusDefense => data.bonusDefense;
+    public float bonusBlockChance => data.bonusBlockChance;
+    public float bonusCriticalChance => data.bonusCriticalChance;
+    public float bonusHealthPercentPerSecond => data.bonusHealthPercentPerSecond;
+    public float bonusManaPercentPerSecond => data.bonusManaPercentPerSecond;
+    public float bonusSpeed => data.bonusSpeed;
     public int maxLevel => data.maxLevel;
 
     // tooltip - runtime part

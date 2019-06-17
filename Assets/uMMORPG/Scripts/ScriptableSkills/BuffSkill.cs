@@ -7,7 +7,7 @@ using Mirror;
 
 public abstract class BuffSkill : BonusSkill
 {
-    public LinearFloat buffTime = new LinearFloat{baseValue=60};
+    public float buffTime = 60.0f;
     public BuffSkillEffect effect;
 
     // helper function to spawn the skill effect on someone
@@ -28,7 +28,7 @@ public abstract class BuffSkill : BonusSkill
     public override string ToolTip(int skillLevel, bool showRequirements = false)
     {
         StringBuilder tip = new StringBuilder(base.ToolTip(skillLevel, showRequirements));
-        tip.Replace("{BUFFTIME}", Utils.PrettySeconds(buffTime.Get(skillLevel)));
+        tip.Replace("{BUFFTIME}", Utils.PrettySeconds(buffTime));
         return tip.ToString();
     }
 }

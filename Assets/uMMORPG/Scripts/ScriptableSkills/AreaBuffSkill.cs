@@ -32,7 +32,7 @@ public class AreaBuffSkill : BuffSkill
         HashSet<Entity> candidates = new HashSet<Entity>();
 
         // find all entities of same type in castRange around the caster
-        Collider[] colliders = Physics.OverlapSphere(caster.transform.position, castRange.Get(skillLevel));
+        Collider[] colliders = Physics.OverlapSphere(caster.transform.position, castRange);
         foreach (Collider co in colliders)
         {
             Entity candidate = co.GetComponentInParent<Entity>();

@@ -18,18 +18,6 @@ public partial class UIShortcuts : MonoBehaviour
     public Button characterInfoButton;
     public GameObject characterInfoPanel;
 
-    public Button questsButton;
-    public GameObject questsPanel;
-
-    public Button craftingButton;
-    public GameObject craftingPanel;
-
-    public Button guildButton;
-    public GameObject guildPanel;
-
-    public Button partyButton;
-    public GameObject partyPanel;
-
     public Button itemMallButton;
     public GameObject itemMallPanel;
 
@@ -56,22 +44,6 @@ public partial class UIShortcuts : MonoBehaviour
 
             characterInfoButton.onClick.SetListener(() => {
                 characterInfoPanel.SetActive(!characterInfoPanel.activeSelf);
-            });
-
-            questsButton.onClick.SetListener(() => {
-                questsPanel.SetActive(!questsPanel.activeSelf);
-            });
-
-            craftingButton.onClick.SetListener(() => {
-                craftingPanel.SetActive(!craftingPanel.activeSelf);
-            });
-
-            partyButton.onClick.SetListener(() => {
-                partyPanel.SetActive(!partyPanel.activeSelf);
-            });
-
-            guildButton.onClick.SetListener(() => {
-                guildPanel.SetActive(!guildPanel.activeSelf);
             });
 
             itemMallButton.onClick.SetListener(() => {
