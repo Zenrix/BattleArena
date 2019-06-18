@@ -123,8 +123,6 @@ public partial class Database : MonoBehaviour
                             level INTEGER NOT NULL,
                             health INTEGER NOT NULL,
                             mana INTEGER NOT NULL,
-                            strength INTEGER NOT NULL,
-                            intelligence INTEGER NOT NULL,
                             gold INTEGER NOT NULL,
                             coins INTEGER NOT NULL,
                             online INTEGER NOT NULL,
@@ -495,10 +493,8 @@ public partial class Database : MonoBehaviour
                 player.level              = Convert.ToInt32((long)mainrow[6]);
                 int health                = Convert.ToInt32((long)mainrow[7]);
                 int mana                  = Convert.ToInt32((long)mainrow[8]);
-                player.strength           = Convert.ToInt32((long)mainrow[9]);
-                player.intelligence       = Convert.ToInt32((long)mainrow[10]);
-                player.gold               = (long)mainrow[11];
-                player.coins              = (long)mainrow[12];
+                player.gold               = (long)mainrow[9];
+                player.coins              = (long)mainrow[10];
 
                 // is the position on a navmesh?
                 // it might not be if we changed the terrain, or if the player
@@ -630,7 +626,7 @@ public partial class Database : MonoBehaviour
         // only use a transaction if not called within SaveMany transaction
         if (useTransaction) ExecuteNonQuery("BEGIN");
 
-        ExecuteNonQuery("INSERT OR REPLACE INTO characters VALUES (@name, @account, @class, @x, @y, @z, @level, @health, @mana, @strength, @intelligence, @gold, @coins, @online, @lastsaved, 0)",
+        ExecuteNonQuery("INSERT OR REPLACE INTO characters VALUES (@name, @account, @class, @x, @y, @z, @level, @health, @mana, @gold, @coins, @online, @lastsaved, 0)",
                         new SqliteParameter("@name", player.name),
                         new SqliteParameter("@account", player.account),
                         new SqliteParameter("@class", player.className),
@@ -640,8 +636,6 @@ public partial class Database : MonoBehaviour
                         new SqliteParameter("@level", player.level),
                         new SqliteParameter("@health", player.health),
                         new SqliteParameter("@mana", player.mana),
-                        new SqliteParameter("@strength", player.strength),
-                        new SqliteParameter("@intelligence", player.intelligence),
                         new SqliteParameter("@gold", player.gold),
                         new SqliteParameter("@coins", player.coins),
                         new SqliteParameter("@online", online ? 1 : 0),

@@ -8,17 +8,10 @@ public partial class UICharacterInfo : MonoBehaviour
     public KeyCode hotKey = KeyCode.T;
     public GameObject panel;
     public Text damageText;
-    public Text defenseText;
     public Text healthText;
     public Text manaText;
-    public Text criticalChanceText;
-    public Text blockChanceText;
     public Text speedText;
     public Text levelText;
-    public Text strengthText;
-    public Text intelligenceText;
-    public Button strengthButton;
-    public Button intelligenceButton;
 
     void Update()
     {
@@ -33,25 +26,10 @@ public partial class UICharacterInfo : MonoBehaviour
             if (panel.activeSelf)
             {
                 damageText.text = player.damage.ToString();
-                defenseText.text = player.defense.ToString();
                 healthText.text = player.healthMax.ToString();
                 manaText.text = player.manaMax.ToString();
-                criticalChanceText.text = (player.criticalChance * 100).ToString("F0") + "%";
-                blockChanceText.text = (player.blockChance * 100).ToString("F0") + "%";
                 speedText.text = player.speed.ToString();
                 levelText.text = player.level.ToString();
-
-                strengthText.text = player.strength.ToString();
-                strengthButton.interactable = player.AttributesSpendable() > 0;
-                strengthButton.onClick.SetListener(() => {
-                    player.CmdIncreaseStrength();
-                });
-
-                intelligenceText.text = player.intelligence.ToString();
-                intelligenceButton.interactable = player.AttributesSpendable() > 0;
-                intelligenceButton.onClick.SetListener(() => {
-                    player.CmdIncreaseIntelligence();
-                });
             }
         }
         else panel.SetActive(false);

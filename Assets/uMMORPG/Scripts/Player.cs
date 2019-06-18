@@ -3,14 +3,7 @@
 // more complex syntax.
 //
 // The default Player class takes care of the basic player logic like the state
-// machine and some properties like damage and defense.
-//
-// The Player class stores the maximum experience for each level in a simple
-// array. So the maximum experience for level 1 can be found in expMax[0] and
-// the maximum experience for level 2 can be found in expMax[1] and so on. The
-// player's health and mana are also level dependent in most MMORPGs, hence why
-// there are hpMax and mpMax arrays too. We can find out a players's max health
-// in level 1 by using hpMax[0] and so on.
+// machine and some properties like damage.
 //
 // The class also takes care of selection handling, which detects 3D world
 // clicks and then targets/navigates somewhere/interacts with someone.
@@ -20,7 +13,6 @@
 // results in moonwalking. Not synchronizing animations over the network will
 // also save us bandwidth
 using UnityEngine;
-using UnityEngine.AI;
 using Mirror;
 using System;
 using System.Linq;
@@ -86,11 +78,8 @@ public partial class Player : Entity
                                   where slot.amount > 0
                                   select ((EquipmentItem)slot.item.data).healthBonus).Sum();
 
-            // calculate strength bonus (1 strength means 1% of hpMax bonus)
-            int attributeBonus = Convert.ToInt32(_healthMax * (strength * 0.01f));
-
             // base (health + buff) + equip + attributes
-            return base.healthMax + equipmentBonus + attributeBonus;
+            return base.healthMax + equipmentBonus;
         }
     }
 
@@ -104,11 +93,8 @@ public partial class Player : Entity
                                   where slot.amount > 0
                                   select ((EquipmentItem)slot.item.data).manaBonus).Sum();
 
-            // calculate intelligence bonus (1 intelligence means 1% of hpMax bonus)
-            int attributeBonus = Convert.ToInt32(_manaMax * (intelligence * 0.01f));
-
             // base (mana + buff) + equip + attributes
-            return base.manaMax + equipmentBonus + attributeBonus;
+            return base.manaMax + equipmentBonus;
         }
     }
 
@@ -127,51 +113,6 @@ public partial class Player : Entity
         }
     }
 
-    // defense
-    public override int defense
-    {
-        get
-        {
-            // calculate equipment bonus
-            int equipmentBonus = (from slot in equipment
-                                  where slot.amount > 0
-                                  select ((EquipmentItem)slot.item.data).defenseBonus).Sum();
-
-            // return base (defense + buff) + equip
-            return base.defense + equipmentBonus;
-        }
-    }
-
-    // block
-    public override float blockChance
-    {
-        get
-        {
-            // calculate equipment bonus
-            float equipmentBonus = (from slot in equipment
-                                    where slot.amount > 0
-                                    select ((EquipmentItem)slot.item.data).blockChanceBonus).Sum();
-
-            // return base (blockChance + buff) + equip
-            return base.blockChance + equipmentBonus;
-        }
-    }
-
-    // crit
-    public override float criticalChance
-    {
-        get
-        {
-            // calculate equipment bonus
-            float equipmentBonus = (from slot in equipment
-                                    where slot.amount > 0
-                                    select ((EquipmentItem)slot.item.data).criticalChanceBonus).Sum();
-
-            // return base (criticalChance + buff) + equip
-            return base.criticalChance + equipmentBonus;
-        }
-    }
-
     // speed
     public override float speed
     {
@@ -181,10 +122,6 @@ public partial class Player : Entity
             return activeMount != null && activeMount.health > 0 ? activeMount.speed : base.speed;
         }
     }
-
-    [Header("Attributes")]
-    [SyncVar] public int strength = 0;
-    [SyncVar] public int intelligence = 0;
 
     [Header("Indicator")]
     public GameObject indicatorPrefab;
@@ -956,32 +893,6 @@ public partial class Player : Entity
         pendingSkill = -1;
         pendingDestinationValid = false;
         pendingVelocityValid = false;
-    }
-
-    // attributes //////////////////////////////////////////////////////////////
-    public static int AttributesSpendablePerLevel = 2;
-
-    public int AttributesSpendable()
-    {
-        // calculate the amount of attribute points that can still be spent
-        // -> 'AttributesSpendablePerLevel' points per level
-        // -> we don't need to store the points in an extra variable, we can
-        //    simply decrease the attribute points spent from the level
-        return (level * AttributesSpendablePerLevel) - (strength + intelligence);
-    }
-
-    [Command]
-    public void CmdIncreaseStrength()
-    {
-        // validate
-        if (health > 0 && AttributesSpendable() > 0) ++strength;
-    }
-
-    [Command]
-    public void CmdIncreaseIntelligence()
-    {
-        // validate
-        if (health > 0 && AttributesSpendable() > 0) ++intelligence;
     }
 
     [Server]
