@@ -311,17 +311,6 @@ public partial class NetworkManagerMMO : NetworkManager
 
         // assign basic preview values like name and equipment
         player.name = character.name;
-        for (int i = 0; i < character.equipment.Length; ++i)
-        {
-            ItemSlot slot = character.equipment[i];
-            player.equipment.Add(slot);
-            if (slot.amount > 0)
-            {
-                // OnEquipmentChanged won't be called unless spawned, we
-                // need to refresh manually
-                player.RefreshLocation(i);
-            }
-        }
 
         // add selection script
         preview.AddComponent<SelectableCharacter>();
@@ -469,17 +458,6 @@ public partial class NetworkManagerMMO : NetworkManager
                             prefab.account = account;
                             prefab.className = classes[message.classIndex].name;
                             prefab.transform.position = GetStartPositionFor(prefab.className).position;
-                            for (int i = 0; i < prefab.inventorySize; ++i)
-                            {
-                                // add empty slot or default item if any
-                                prefab.inventory.Add(i < prefab.defaultItems.Length ? new ItemSlot(new Item(prefab.defaultItems[i].item), prefab.defaultItems[i].amount) : new ItemSlot());
-                            }
-                            for (int i = 0; i < prefab.equipmentInfo.Length; ++i)
-                            {
-                                // add empty slot or default item if any
-                                EquipmentInfo info = prefab.equipmentInfo[i];
-                                prefab.equipment.Add(info.defaultItem.item != null ? new ItemSlot(new Item(info.defaultItem.item), info.defaultItem.amount) : new ItemSlot());
-                            }
                             prefab.health = prefab.healthMax; // after equipment in case of boni
                             prefab.mana = prefab.manaMax; // after equipment in case of boni
 

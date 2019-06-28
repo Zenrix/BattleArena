@@ -29,8 +29,6 @@ public partial class UISkillbar : MonoBehaviour
 
                 // skill, inventory item or equipment item?
                 int skillIndex = player.GetSkillIndexByName(player.skillbar[i].reference);
-                int inventoryIndex = player.GetInventoryIndexByName(player.skillbar[i].reference);
-                int equipmentIndex = player.GetEquipmentIndexByName(player.skillbar[i].reference);
                 if (skillIndex != -1)
                 {
                     Skill skill = player.skills[skillIndex];
@@ -61,44 +59,6 @@ public partial class UISkillbar : MonoBehaviour
                     slot.cooldownText.text = cooldown.ToString("F0");
                     slot.cooldownCircle.fillAmount = skill.cooldown > 0 ? cooldown / skill.cooldown : 0;
                     slot.amountOverlay.SetActive(false);
-                }
-                else if (inventoryIndex != -1)
-                {
-                    ItemSlot itemSlot = player.inventory[inventoryIndex];
-
-                    // hotkey pressed and not typing in any input right now?
-                    if (Input.GetKeyDown(player.skillbar[i].hotKey) && !UIUtils.AnyInputActive())
-                        player.CmdUseInventoryItem(inventoryIndex);
-
-                    // refresh inventory slot
-                    slot.button.onClick.SetListener(() => {
-                        player.CmdUseInventoryItem(inventoryIndex);
-                    });
-                    slot.tooltip.enabled = true;
-                    slot.tooltip.text = itemSlot.ToolTip();
-                    slot.dragAndDropable.dragable = true;
-                    slot.image.color = Color.white;
-                    slot.image.sprite = itemSlot.item.image;
-                    slot.cooldownOverlay.SetActive(false);
-                    slot.cooldownCircle.fillAmount = 0;
-                    slot.amountOverlay.SetActive(itemSlot.amount > 1);
-                    slot.amountText.text = itemSlot.amount.ToString();
-                }
-                else if (equipmentIndex != -1)
-                {
-                    ItemSlot itemSlot = player.equipment[equipmentIndex];
-
-                    // refresh equipment slot
-                    slot.button.onClick.RemoveAllListeners();
-                    slot.tooltip.enabled = true;
-                    slot.tooltip.text = itemSlot.ToolTip();
-                    slot.dragAndDropable.dragable = true;
-                    slot.image.color = Color.white;
-                    slot.image.sprite = itemSlot.item.image;
-                    slot.cooldownOverlay.SetActive(false);
-                    slot.cooldownCircle.fillAmount = 0;
-                    slot.amountOverlay.SetActive(itemSlot.amount > 1);
-                    slot.amountText.text = itemSlot.amount.ToString();
                 }
                 else
                 {

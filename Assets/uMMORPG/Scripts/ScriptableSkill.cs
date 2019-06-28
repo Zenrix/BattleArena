@@ -55,8 +55,7 @@ public abstract partial class ScriptableSkill : ScriptableObject
     {
         // has a weapon (important for projectiles etc.), no cooldown, hp, mp?
         return caster.health > 0 &&
-               caster.mana >= manaCosts &&
-               caster.GetEquippedWeaponCategory().StartsWith(requiredWeaponCategory);
+               caster.mana >= manaCosts;
     }
 
     // 2. target check: can we cast this skill 'here' or on this 'target'?

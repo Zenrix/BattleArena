@@ -51,7 +51,6 @@ public partial class Monster : Entity
     [Header("Loot")]
     public int lootGoldMin = 0;
     public int lootGoldMax = 10;
-    public ItemDropChance[] dropChances;
     public ParticleSystem lootIndicator;
     // note: Items have a .valid property that can be used to 'delete' an item.
     //       it's better than .RemoveAt() because we won't run into index-out-of
@@ -536,7 +535,6 @@ public partial class Monster : Entity
         {
             // respawn at the start position with full health, visibility, no loot
             gold = 0;
-            inventory.Clear();
             Show();
             agent.Warp(startPosition); // recommended over transform.position
             Revive();
@@ -641,7 +639,7 @@ public partial class Monster : Entity
     public bool HasLoot()
     {
         // any gold or valid items?
-        return gold > 0 || inventory.Any(slot => slot.amount > 0);
+        return gold > 0;
     }
 
     // death ///////////////////////////////////////////////////////////////////
@@ -660,11 +658,6 @@ public partial class Monster : Entity
 
         // generate gold
         gold = Random.Range(lootGoldMin, lootGoldMax);
-
-        // generate items (note: can't use Linq because of SyncList)
-        foreach (ItemDropChance itemChance in dropChances)
-            if (Random.value <= itemChance.probability)
-                inventory.Add(new ItemSlot(new Item(itemChance.item)));
 
         // addon system hooks
         Utils.InvokeMany(typeof(Monster), this, "OnDeath_");

@@ -124,7 +124,6 @@ public partial class Database : MonoBehaviour
                             health INTEGER NOT NULL,
                             mana INTEGER NOT NULL,
                             gold INTEGER NOT NULL,
-                            coins INTEGER NOT NULL,
                             online INTEGER NOT NULL,
                             lastsaved DATETIME NOT NULL,
                             deleted INTEGER NOT NULL)");
@@ -346,63 +345,6 @@ public partial class Database : MonoBehaviour
         return table.Select(row => (string)row[0]).ToList();
     }
 
-    void LoadInventory(Player player)
-    {
-        // fill all slots first
-        for (int i = 0; i < player.inventorySize; ++i)
-            player.inventory.Add(new ItemSlot());
-
-        // then load valid items and put into their slots
-        // (one big query is A LOT faster than querying each slot separately)
-        List< List<object> > table = ExecuteReader("SELECT name, slot, amount, summonedHealth, summonedLevel, summonedExperience FROM character_inventory WHERE character=@character", new SqliteParameter("@character", player.name));
-        foreach (List<object> row in table)
-        {
-            string itemName = (string)row[0];
-            int slot = Convert.ToInt32((long)row[1]);
-            if (slot < player.inventorySize)
-            {
-                if (ScriptableItem.dict.TryGetValue(itemName.GetStableHashCode(), out ScriptableItem itemData))
-                {
-                    Item item = new Item(itemData);
-                    int amount = Convert.ToInt32((long)row[2]);
-                    item.summonedHealth = Convert.ToInt32((long)row[3]);
-                    item.summonedLevel = Convert.ToInt32((long)row[4]);
-                    item.summonedExperience = (long)row[5];
-                    player.inventory[slot] = new ItemSlot(item, amount);;
-                }
-                else Debug.LogWarning("LoadInventory: skipped item " + itemName + " for " + player.name + " because it doesn't exist anymore. If it wasn't removed intentionally then make sure it's in the Resources folder.");
-            }
-            else Debug.LogWarning("LoadInventory: skipped slot " + slot + " for " + player.name + " because it's bigger than size " + player.inventorySize);
-        }
-    }
-
-    void LoadEquipment(Player player)
-    {
-        // fill all slots first
-        for (int i = 0; i < player.equipmentInfo.Length; ++i)
-            player.equipment.Add(new ItemSlot());
-
-        // then load valid equipment and put into their slots
-        // (one big query is A LOT faster than querying each slot separately)
-        List< List<object> > table = ExecuteReader("SELECT name, slot, amount FROM character_equipment WHERE character=@character", new SqliteParameter("@character", player.name));
-        foreach (List<object> row in table)
-        {
-            string itemName = (string)row[0];
-            int slot = Convert.ToInt32((long)row[1]);
-            if (slot < player.equipmentInfo.Length)
-            {
-                if (ScriptableItem.dict.TryGetValue(itemName.GetStableHashCode(), out ScriptableItem itemData))
-                {
-                    Item item = new Item(itemData);
-                    int amount = Convert.ToInt32((long)row[2]);
-                    player.equipment[slot] = new ItemSlot(item, amount);
-                }
-                else Debug.LogWarning("LoadEquipment: skipped item " + itemName + " for " + player.name + " because it doesn't exist anymore. If it wasn't removed intentionally then make sure it's in the Resources folder.");
-            }
-            else Debug.LogWarning("LoadEquipment: skipped slot " + slot + " for " + player.name + " because it's bigger than size " + player.equipmentInfo.Length);
-        }
-    }
-
     void LoadSkills(Player player)
     {
         // load skills based on skill templates (the others don't matter)
@@ -494,7 +436,6 @@ public partial class Database : MonoBehaviour
                 int health                = Convert.ToInt32((long)mainrow[7]);
                 int mana                  = Convert.ToInt32((long)mainrow[8]);
                 player.gold               = (long)mainrow[9];
-                player.coins              = (long)mainrow[10];
 
                 // is the position on a navmesh?
                 // it might not be if we changed the terrain, or if the player
@@ -516,8 +457,6 @@ public partial class Database : MonoBehaviour
                     //Debug.Log(player.name + " spawn position reset because it's not on a NavMesh anymore. This can happen if the player previously logged out in an instance or if the Terrain was changed.");
                 }
 
-                LoadInventory(player);
-                LoadEquipment(player);
                 LoadSkills(player);
                 LoadBuffs(player);
 
@@ -541,45 +480,6 @@ public partial class Database : MonoBehaviour
             else Debug.LogError("no prefab found for class: " + className);
         }
         return null;
-    }
-
-    void SaveInventory(Player player)
-    {
-        // inventory: remove old entries first, then add all new ones
-        // (we could use UPDATE where slot=... but deleting everything makes
-        //  sure that there are never any ghosts)
-        ExecuteNonQuery("DELETE FROM character_inventory WHERE character=@character", new SqliteParameter("@character", player.name));
-        for (int i = 0; i < player.inventory.Count; ++i)
-        {
-            ItemSlot slot = player.inventory[i];
-            if (slot.amount > 0) // only relevant items to save queries/storage/time
-                ExecuteNonQuery("INSERT INTO character_inventory VALUES (@character, @slot, @name, @amount, @summonedHealth, @summonedLevel, @summonedExperience)",
-                                new SqliteParameter("@character", player.name),
-                                new SqliteParameter("@slot", i),
-                                new SqliteParameter("@name", slot.item.name),
-                                new SqliteParameter("@amount", slot.amount),
-                                new SqliteParameter("@summonedHealth", slot.item.summonedHealth),
-                                new SqliteParameter("@summonedLevel", slot.item.summonedLevel),
-                                new SqliteParameter("@summonedExperience", slot.item.summonedExperience));
-        }
-    }
-
-    void SaveEquipment(Player player)
-    {
-        // equipment: remove old entries first, then add all new ones
-        // (we could use UPDATE where slot=... but deleting everything makes
-        //  sure that there are never any ghosts)
-        ExecuteNonQuery("DELETE FROM character_equipment WHERE character=@character", new SqliteParameter("@character", player.name));
-        for (int i = 0; i < player.equipment.Count; ++i)
-        {
-            ItemSlot slot = player.equipment[i];
-            if (slot.amount > 0) // only relevant equip to save queries/storage/time
-                ExecuteNonQuery("INSERT INTO character_equipment VALUES (@character, @slot, @name, @amount)",
-                                new SqliteParameter("@character", player.name),
-                                new SqliteParameter("@slot", i),
-                                new SqliteParameter("@name", slot.item.name),
-                                new SqliteParameter("@amount", slot.amount));
-        }
     }
 
     void SaveSkills(Player player)
@@ -626,7 +526,7 @@ public partial class Database : MonoBehaviour
         // only use a transaction if not called within SaveMany transaction
         if (useTransaction) ExecuteNonQuery("BEGIN");
 
-        ExecuteNonQuery("INSERT OR REPLACE INTO characters VALUES (@name, @account, @class, @x, @y, @z, @level, @health, @mana, @gold, @coins, @online, @lastsaved, 0)",
+        ExecuteNonQuery("INSERT OR REPLACE INTO characters VALUES (@name, @account, @class, @x, @y, @z, @level, @health, @mana, @gold, @online, @lastsaved, 0)",
                         new SqliteParameter("@name", player.name),
                         new SqliteParameter("@account", player.account),
                         new SqliteParameter("@class", player.className),
@@ -637,12 +537,9 @@ public partial class Database : MonoBehaviour
                         new SqliteParameter("@health", player.health),
                         new SqliteParameter("@mana", player.mana),
                         new SqliteParameter("@gold", player.gold),
-                        new SqliteParameter("@coins", player.coins),
                         new SqliteParameter("@online", online ? 1 : 0),
                         new SqliteParameter("@lastsaved", DateTime.UtcNow));
 
-        SaveInventory(player);
-        SaveEquipment(player);
         SaveSkills(player);
         SaveBuffs(player);
 

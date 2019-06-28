@@ -34,7 +34,6 @@ public partial class CharactersAvailableMsg : MessageBase
     {
         public string name;
         public string className; // = the prefab name
-        public ItemSlot[] equipment;
     }
     public CharacterPreview[] characters;
 
@@ -46,8 +45,7 @@ public partial class CharactersAvailableMsg : MessageBase
         characters = players.Select(
             player => new CharacterPreview{
                 name = player.name,
-                className = player.className,
-                equipment = player.equipment.ToArray()
+                className = player.className
             }
         ).ToArray();
 

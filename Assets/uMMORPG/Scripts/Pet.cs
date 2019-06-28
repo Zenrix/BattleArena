@@ -36,14 +36,6 @@ public partial class Pet : Summonable
     // the last skill that was casted, to decide which one to cast next
     int lastSkill = -1;
 
-    // sync to item ////////////////////////////////////////////////////////////
-    protected override ItemSlot SyncStateToItemSlot(ItemSlot slot)
-    {
-        // pet also has experience, unlike summonable. sync that too.
-        slot = base.SyncStateToItemSlot(slot);
-        return slot;
-    }
-
     // networkbehaviour ////////////////////////////////////////////////////////
     protected override void Awake()
     {
@@ -117,14 +109,6 @@ public partial class Pet : Summonable
 
     void OnDestroy()
     {
-        // Unity bug: isServer is false when called in host mode. only true when
-        // called in dedicated mode. so we need a workaround:
-        if (NetworkServer.active) // isServer
-        {
-            // keep player's pet item up to date
-            SyncToOwnerItem();
-        }
-
         // addon system hooks
         Utils.InvokeMany(typeof(Pet), this, "OnDestroy_");
     }
@@ -621,9 +605,6 @@ public partial class Pet : Summonable
         // updated again, the death/respawn will happen immediately if current
         // time > end time.
         deathTimeEnd = NetworkTime.time + deathTime;
-
-        // keep player's pet item up to date
-        SyncToOwnerItem();
 
         // addon system hooks
         Utils.InvokeMany(typeof(Pet), this, "OnDeath_");

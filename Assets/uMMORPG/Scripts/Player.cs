@@ -26,21 +26,6 @@ public partial struct SkillbarEntry
     public KeyCode hotKey;
 }
 
-[Serializable]
-public partial struct EquipmentInfo
-{
-    public string requiredCategory;
-    public Transform location;
-    public ScriptableItemAndAmount defaultItem;
-}
-
-[Serializable]
-public partial struct ItemMallCategory
-{
-    public string category;
-    public ScriptableItem[] items;
-}
-
 [RequireComponent(typeof(Animator))]
 [RequireComponent(typeof(PlayerChat))]
 [RequireComponent(typeof(NetworkName))]
@@ -73,13 +58,7 @@ public partial class Player : Entity
     {
         get
         {
-            // calculate equipment bonus
-            int equipmentBonus = (from slot in equipment
-                                  where slot.amount > 0
-                                  select ((EquipmentItem)slot.item.data).healthBonus).Sum();
-
-            // base (health + buff) + equip + attributes
-            return base.healthMax + equipmentBonus;
+            return base.healthMax;
         }
     }
 
@@ -88,13 +67,7 @@ public partial class Player : Entity
     {
         get
         {
-            // calculate equipment bonus
-            int equipmentBonus = (from slot in equipment
-                                  where slot.amount > 0
-                                  select ((EquipmentItem)slot.item.data).manaBonus).Sum();
-
-            // base (mana + buff) + equip + attributes
-            return base.manaMax + equipmentBonus;
+            return base.manaMax;
         }
     }
 
@@ -103,13 +76,7 @@ public partial class Player : Entity
     {
         get
         {
-            // calculate equipment bonus
-            int equipmentBonus = (from slot in equipment
-                                  where slot.amount > 0
-                                  select ((EquipmentItem)slot.item.data).damageBonus).Sum();
-
-            // return base (damage + buff) + equip
-            return base.damage + equipmentBonus;
+            return base.damage;
         }
     }
 
@@ -129,23 +96,7 @@ public partial class Player : Entity
 
     [Header("Inventory")]
     public int inventorySize = 30;
-    public ScriptableItemAndAmount[] defaultItems;
     public KeyCode[] inventorySplitKeys = {KeyCode.LeftShift, KeyCode.RightShift};
-
-    [Header("Trash")]
-    [SyncVar] public ItemSlot trash;
-
-    [Header("Equipment Info")]
-    public EquipmentInfo[] equipmentInfo = {
-        new EquipmentInfo{requiredCategory="Weapon", location=null, defaultItem=new ScriptableItemAndAmount()},
-        new EquipmentInfo{requiredCategory="Head", location=null, defaultItem=new ScriptableItemAndAmount()},
-        new EquipmentInfo{requiredCategory="Chest", location=null, defaultItem=new ScriptableItemAndAmount()},
-        new EquipmentInfo{requiredCategory="Legs", location=null, defaultItem=new ScriptableItemAndAmount()},
-        new EquipmentInfo{requiredCategory="Shield", location=null, defaultItem=new ScriptableItemAndAmount()},
-        new EquipmentInfo{requiredCategory="Shoulders", location=null, defaultItem=new ScriptableItemAndAmount()},
-        new EquipmentInfo{requiredCategory="Hands", location=null, defaultItem=new ScriptableItemAndAmount()},
-        new EquipmentInfo{requiredCategory="Feet", location=null, defaultItem=new ScriptableItemAndAmount()}
-    };
 
     [Header("Skillbar")]
     public SkillbarEntry[] skillbar = {
@@ -170,11 +121,6 @@ public partial class Player : Entity
     [Header("PvP")]
     public BuffSkill offenderBuff;
     public BuffSkill murdererBuff;
-
-    [Header("Item Mall")]
-    public ItemMallCategory[] itemMallCategories; // the items that can be purchased in the item mall
-    [SyncVar] public long coins = 0;
-    public float couponWaitSeconds = 3;
 
     // 'Pet' can't be SyncVar so we use [SyncVar] GameObject and wrap it
     [Header("Pet")]
@@ -286,25 +232,11 @@ public partial class Player : Entity
     public override void OnStartClient()
     {
         base.OnStartClient();
-
-        // setup synclist callbacks on client. no need to update and show and
-        // animate equipment on server
-        equipment.Callback += OnEquipmentChanged;
-
-        // refresh all locations once (on synclist changed won't be called
-        // for initial lists)
-        // -> needs to happen before ProximityChecker's initial SetVis call,
-        //    otherwise we get a hidden character with visible equipment
-        //    (hence OnStartClient and not Start)
-        for (int i = 0; i < equipment.Count; ++i)
-            RefreshLocation(i);
     }
 
     public override void OnStartServer()
     {
         base.OnStartServer();
-
-        InvokeRepeating(nameof(ProcessCoinOrders), 5, 5);
 
         // addon system hooks
         Utils.InvokeMany(typeof(Player), this, "OnStartServer_");
@@ -1005,28 +937,6 @@ public partial class Player : Entity
         }
     }
 
-    [Command]
-    public void CmdTakeLootItem(int index)
-    {
-        // validate: dead monster and close enough and valid loot index?
-        // use collider point(s) to also work with big entities
-        if ((state == "IDLE" || state == "MOVING" || state == "CASTING") &&
-            target != null && target is Monster && target.health == 0 &&
-            Utils.ClosestDistance(collider, target.collider) <= interactionRange &&
-            0 <= index && index < target.inventory.Count &&
-            target.inventory[index].amount > 0)
-        {
-            ItemSlot slot = target.inventory[index];
-
-            // try to add it to the inventory, clear monster slot if it worked
-            if (InventoryAdd(slot.item, slot.amount))
-            {
-                slot.amount = 0;
-                target.inventory[index] = slot;
-            }
-        }
-    }
-
     // inventory ///////////////////////////////////////////////////////////////
     // are inventory operations like swap, merge, split allowed at the moment?
     bool InventoryOperationsAllowed()
@@ -1034,160 +944,6 @@ public partial class Player : Entity
         return state == "IDLE" ||
                state == "MOVING" ||
                state == "CASTING";
-    }
-
-    [Command]
-    public void CmdSwapInventoryTrash(int inventoryIndex)
-    {
-        // dragging an inventory item to the trash always overwrites the trash
-        if (InventoryOperationsAllowed() &&
-            0 <= inventoryIndex && inventoryIndex < inventory.Count)
-        {
-            // inventory slot has to be valid and destroyable and not summoned
-            ItemSlot slot = inventory[inventoryIndex];
-            if (slot.amount > 0 && slot.item.destroyable && !slot.item.summoned)
-            {
-                // overwrite trash
-                trash = slot;
-
-                // clear inventory slot
-                slot.amount = 0;
-                inventory[inventoryIndex] = slot;
-            }
-        }
-    }
-
-    [Command]
-    public void CmdSwapTrashInventory(int inventoryIndex)
-    {
-        if (InventoryOperationsAllowed() &&
-            0 <= inventoryIndex && inventoryIndex < inventory.Count)
-        {
-            // inventory slot has to be empty or destroyable
-            ItemSlot slot = inventory[inventoryIndex];
-            if (slot.amount == 0 || slot.item.destroyable)
-            {
-                // swap them
-                inventory[inventoryIndex] = trash;
-                trash = slot;
-            }
-        }
-    }
-
-    [Command]
-    public void CmdSwapInventoryInventory(int fromIndex, int toIndex) {
-        // note: should never send a command with complex types!
-        // validate: make sure that the slots actually exist in the inventory
-        // and that they are not equal
-        if (InventoryOperationsAllowed() &&
-            0 <= fromIndex && fromIndex < inventory.Count &&
-            0 <= toIndex && toIndex < inventory.Count &&
-            fromIndex != toIndex)
-        {
-            // swap them
-            ItemSlot temp = inventory[fromIndex];
-            inventory[fromIndex] = inventory[toIndex];
-            inventory[toIndex] = temp;
-        }
-    }
-
-    [Command]
-    public void CmdInventorySplit(int fromIndex, int toIndex)
-    {
-        // note: should never send a command with complex types!
-        // validate: make sure that the slots actually exist in the inventory
-        // and that they are not equal
-        if (InventoryOperationsAllowed() &&
-            0 <= fromIndex && fromIndex < inventory.Count &&
-            0 <= toIndex && toIndex < inventory.Count &&
-            fromIndex != toIndex)
-        {
-            // slotFrom needs at least two to split, slotTo has to be empty
-            ItemSlot slotFrom = inventory[fromIndex];
-            ItemSlot slotTo = inventory[toIndex];
-            if (slotFrom.amount >= 2 && slotTo.amount == 0)
-            {
-                // split them serversided (has to work for even and odd)
-                slotTo = slotFrom; // copy the value
-
-                slotTo.amount = slotFrom.amount / 2;
-                slotFrom.amount -= slotTo.amount; // works for odd too
-
-                // put back into the list
-                inventory[fromIndex] = slotFrom;
-                inventory[toIndex] = slotTo;
-            }
-        }
-    }
-
-    [Command]
-    public void CmdInventoryMerge(int fromIndex, int toIndex)
-    {
-        if (InventoryOperationsAllowed() &&
-            0 <= fromIndex && fromIndex < inventory.Count &&
-            0 <= toIndex && toIndex < inventory.Count &&
-            fromIndex != toIndex)
-        {
-            // both items have to be valid
-            ItemSlot slotFrom = inventory[fromIndex];
-            ItemSlot slotTo = inventory[toIndex];
-            if (slotFrom.amount > 0 && slotTo.amount > 0)
-            {
-                // make sure that items are the same type
-                // note: .Equals because name AND dynamic variables matter (petLevel etc.)
-                if (slotFrom.item.Equals(slotTo.item))
-                {
-                    // merge from -> to
-                    // put as many as possible into 'To' slot
-                    int put = slotTo.IncreaseAmount(slotFrom.amount);
-                    slotFrom.DecreaseAmount(put);
-
-                    // put back into the list
-                    inventory[fromIndex] = slotFrom;
-                    inventory[toIndex] = slotTo;
-                }
-            }
-        }
-    }
-
-    [ClientRpc]
-    public void RpcUsedItem(Item item)
-    {
-        // validate
-        if (item.data is UsableItem)
-        {
-            UsableItem itemData = (UsableItem)item.data;
-            itemData.OnUsed(this);
-        }
-    }
-
-    [Command]
-    public void CmdUseInventoryItem(int index)
-    {
-        // validate
-        if (InventoryOperationsAllowed() &&
-            0 <= index && index < inventory.Count && inventory[index].amount > 0 &&
-            inventory[index].item.data is UsableItem)
-        {
-            // use item
-            // note: we don't decrease amount / destroy in all cases because
-            // some items may swap to other slots in .Use()
-            UsableItem itemData = (UsableItem)inventory[index].item.data;
-            if (itemData.CanUse(this, index))
-            {
-                // .Use might clear the slot, so we backup the Item first for the Rpc
-                Item item = inventory[index].item;
-                itemData.Use(this, index);
-                RpcUsedItem(item);
-            }
-        }
-    }
-
-    // equipment ///////////////////////////////////////////////////////////////
-    void OnEquipmentChanged(SyncListItemSlot.Operation op, int index, ItemSlot slot)
-    {
-        // update the model
-        RefreshLocation(index);
     }
 
     bool CanReplaceAllBones(SkinnedMeshRenderer equipmentSkin)
@@ -1220,97 +976,6 @@ public partial class Player : Entity
     {
         foreach (Animator anim in GetComponentsInChildren<Animator>())
             anim.Rebind();
-    }
-
-    public void RefreshLocation(int index)
-    {
-        ItemSlot slot = equipment[index];
-        EquipmentInfo info = equipmentInfo[index];
-
-        // valid category and valid location? otherwise don't bother
-        if (info.requiredCategory != "" && info.location != null)
-        {
-            // clear previous one in any case (when overwriting or clearing)
-            if (info.location.childCount > 0) Destroy(info.location.GetChild(0).gameObject);
-
-            //  valid item?
-            if (slot.amount > 0)
-            {
-                // has a model? then set it
-                EquipmentItem itemData = (EquipmentItem)slot.item.data;
-                if (itemData.modelPrefab != null)
-                {
-                    // load the model
-                    GameObject go = Instantiate(itemData.modelPrefab);
-                    go.name = itemData.modelPrefab.name; // avoid "(Clone)"
-                    go.transform.SetParent(info.location, false);
-
-                    // skinned mesh and all bones can be be replaced?
-                    // then replace all. this way the equipment can follow IK
-                    // too (if any).
-                    // => this is the RECOMMENDED method for animated equipment.
-                    //    name all equipment bones the same as player bones and
-                    //    everything will work perfectly
-                    // => this is the ONLY way for equipment to follow IK, e.g.
-                    //    in games where arms aim up/down.
-                    // NOTE: uMMORPG doesn't use IK at the moment, but it might
-                    //       need this later.
-                    SkinnedMeshRenderer equipmentSkin = go.GetComponentInChildren<SkinnedMeshRenderer>();
-                    if (equipmentSkin != null && CanReplaceAllBones(equipmentSkin))
-                        ReplaceAllBones(equipmentSkin);
-
-                    // animator? then replace controller to follow player's
-                    // animations
-                    // => this is the ALTERNATIVE method for animated equipment.
-                    //    add the Animator and use the player's avatar. works
-                    //    for animated pants, etc. but not for IK.
-                    // => this is NECESSARY for 'external' equipment like wings,
-                    //    staffs, etc. that should be animated but don't contain
-                    //    the same bones as the player.
-                    Animator anim = go.GetComponent<Animator>();
-                    if (anim != null)
-                    {
-                        // assign main animation controller to it
-                        anim.runtimeAnimatorController = animator.runtimeAnimatorController;
-
-                        // restart all animators, so that skinned mesh equipment will be
-                        // in sync with the main animation
-                        RebindAnimators();
-                    }
-                }
-            }
-        }
-    }
-
-    // swap inventory & equipment slots to equip/unequip. used in multiple places
-    [Server]
-    public void SwapInventoryEquip(int inventoryIndex, int equipmentIndex)
-    {
-        // validate: make sure that the slots actually exist in the inventory
-        // and in the equipment
-        if (health > 0 &&
-            0 <= inventoryIndex && inventoryIndex < inventory.Count &&
-            0 <= equipmentIndex && equipmentIndex < equipment.Count)
-        {
-            // item slot has to be empty (unequip) or equipable
-            ItemSlot slot = inventory[inventoryIndex];
-            if (slot.amount == 0 ||
-                slot.item.data is EquipmentItem &&
-                ((EquipmentItem)slot.item.data).CanEquip(this, inventoryIndex, equipmentIndex))
-            {
-                // swap them
-                ItemSlot temp = equipment[equipmentIndex];
-                equipment[equipmentIndex] = slot;
-                inventory[inventoryIndex] = temp;
-            }
-        }
-    }
-
-
-    [Command]
-    public void CmdSwapInventoryEquip(int inventoryIndex, int equipmentIndex)
-    {
-        SwapInventoryEquip(inventoryIndex, equipmentIndex);
     }
 
     // skills //////////////////////////////////////////////////////////////////
@@ -1416,9 +1081,7 @@ public partial class Player : Entity
                 // (might be an old character's playerprefs)
                 // => only allow learned skills (in case it's an old character's
                 //    skill that we also have, but haven't learned yet)
-                if (HasLearnedSkill(entry) ||
-                    GetInventoryIndexByName(entry) != -1 ||
-                    GetEquipmentIndexByName(entry) != -1)
+                if (HasLearnedSkill(entry))
                 {
                     skillbar[i].reference = entry;
                 }
@@ -1458,66 +1121,6 @@ public partial class Player : Entity
     public void StartMurderer()
     {
         if (murdererBuff != null) AddOrRefreshBuff(new Buff(murdererBuff, 1));
-    }
-
-    // item mall ///////////////////////////////////////////////////////////////
-    [Command]
-    public void CmdEnterCoupon(string coupon)
-    {
-        // only allow entering one coupon every few seconds to avoid brute force
-        if (NetworkTime.time >= nextRiskyActionTime)
-        {
-            // YOUR COUPON VALIDATION CODE HERE
-            // coins += ParseCoupon(coupon);
-            Debug.Log("coupon: " + coupon + " => " + name + "@" + NetworkTime.time);
-            nextRiskyActionTime = NetworkTime.time + couponWaitSeconds;
-        }
-    }
-
-    [Command]
-    public void CmdUnlockItem(int categoryIndex, int itemIndex)
-    {
-        // validate: only if alive so people can't buy resurrection potions
-        // after dieing in a PvP fight etc.
-        if (health > 0 &&
-            0 <= categoryIndex && categoryIndex <= itemMallCategories.Length &&
-            0 <= itemIndex && itemIndex <= itemMallCategories[categoryIndex].items.Length)
-        {
-            Item item = new Item(itemMallCategories[categoryIndex].items[itemIndex]);
-            if (0 < item.itemMallPrice && item.itemMallPrice <= coins)
-            {
-                // try to add it to the inventory, subtract costs from coins
-                if (InventoryAdd(item, 1))
-                {
-                    coins -= item.itemMallPrice;
-                    Debug.Log(name + " unlocked " + item.name);
-
-                    // NOTE: item mall purchases need to be persistent, yet
-                    // resaving the player here is not necessary because if the
-                    // server crashes before next save, then both the inventory
-                    // and the coins will be reverted anyway.
-                }
-            }
-        }
-    }
-
-    // coins can't be increased by an external application while the player is
-    // ingame. we use an additional table to store new orders in and process
-    // them every few seconds from here. this way we can even notify the player
-    // after his order was processed successfully.
-    //
-    // note: the alternative is to keep player.coins in the database at all
-    // times, but then we need RPCs and the client needs a .coins value anyway.
-    [Server]
-    void ProcessCoinOrders()
-    {
-        List<long> orders = Database.singleton.GrabCharacterOrders(name);
-        foreach (long reward in orders)
-        {
-            coins += reward;
-            Debug.Log("Processed order for: " + name + ";" + reward);
-            chat.TargetMsgInfo("Processed order for: " + reward);
-        }
     }
 
     // pet /////////////////////////////////////////////////////////////////////
@@ -1779,65 +1382,6 @@ public partial class Player : Entity
     {
         // call base function too
         base.OnTriggerEnter(col);
-    }
-
-    // drag and drop ///////////////////////////////////////////////////////////
-    void OnDragAndDrop_InventorySlot_InventorySlot(int[] slotIndices)
-    {
-        // slotIndices[0] = slotFrom; slotIndices[1] = slotTo
-
-        // merge? check Equals because name AND dynamic variables matter (petLevel etc.)
-        if (inventory[slotIndices[0]].amount > 0 && inventory[slotIndices[1]].amount > 0 &&
-            inventory[slotIndices[0]].item.Equals(inventory[slotIndices[1]].item))
-        {
-            CmdInventoryMerge(slotIndices[0], slotIndices[1]);
-        }
-        // split?
-        else if (Utils.AnyKeyPressed(inventorySplitKeys))
-        {
-            CmdInventorySplit(slotIndices[0], slotIndices[1]);
-        }
-        // swap?
-        else
-        {
-            CmdSwapInventoryInventory(slotIndices[0], slotIndices[1]);
-        }
-    }
-
-    void OnDragAndDrop_InventorySlot_TrashSlot(int[] slotIndices)
-    {
-        // slotIndices[0] = slotFrom; slotIndices[1] = slotTo
-        CmdSwapInventoryTrash(slotIndices[0]);
-    }
-
-    void OnDragAndDrop_InventorySlot_EquipmentSlot(int[] slotIndices)
-    {
-        // slotIndices[0] = slotFrom; slotIndices[1] = slotTo
-        CmdSwapInventoryEquip(slotIndices[0], slotIndices[1]);
-    }
-
-    void OnDragAndDrop_InventorySlot_SkillbarSlot(int[] slotIndices)
-    {
-        // slotIndices[0] = slotFrom; slotIndices[1] = slotTo
-        skillbar[slotIndices[1]].reference = inventory[slotIndices[0]].item.name; // just save it clientsided
-    }
-
-    void OnDragAndDrop_TrashSlot_InventorySlot(int[] slotIndices)
-    {
-        // slotIndices[0] = slotFrom; slotIndices[1] = slotTo
-        CmdSwapTrashInventory(slotIndices[1]);
-    }
-
-    void OnDragAndDrop_EquipmentSlot_InventorySlot(int[] slotIndices)
-    {
-        // slotIndices[0] = slotFrom; slotIndices[1] = slotTo
-        CmdSwapInventoryEquip(slotIndices[1], slotIndices[0]); // reversed
-    }
-
-    void OnDragAndDrop_EquipmentSlot_SkillbarSlot(int[] slotIndices)
-    {
-        // slotIndices[0] = slotFrom; slotIndices[1] = slotTo
-        skillbar[slotIndices[1]].reference = equipment[slotIndices[0]].item.name; // just save it clientsided
     }
 
     void OnDragAndDrop_SkillsSlot_SkillbarSlot(int[] slotIndices)

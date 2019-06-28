@@ -62,13 +62,6 @@ public partial class Mount : Summonable
 
     void OnDestroy()
     {
-        // Unity bug: isServer is false when called in host mode. only true when
-        // called in dedicated mode. so we need a workaround:
-        if (NetworkServer.active) // isServer
-        {
-            // keep player's pet item up to date
-            SyncToOwnerItem();
-        }
 
         // addon system hooks
         Utils.InvokeMany(typeof(Mount), this, "OnDestroy_");
@@ -198,9 +191,6 @@ public partial class Mount : Summonable
         // updated again, the death/respawn will happen immediately if current
         // time > end time.
         deathTimeEnd = NetworkTime.time + deathTime;
-
-        // keep player's pet item up to date
-        SyncToOwnerItem();
 
         // addon system hooks
         Utils.InvokeMany(typeof(Mount), this, "OnDeath_");
